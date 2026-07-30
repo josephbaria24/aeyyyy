@@ -102,6 +102,7 @@ export function Navbar() {
   const isFloating = scrolled || mobileMenuOpen;
   const useLightText = !isFloating || onDarkBg || mobileMenuOpen;
   const textClass = useLightText ? 'text-white' : 'text-[#0a1628]';
+  const compactMobile = pathname === '/' && scrolled;
 
   return (
     <>
@@ -109,8 +110,8 @@ export function Navbar() {
         ref={navRef}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
-        className={`fixed top-0 left-0 right-0 z-50 px-4 md:px-6 transition-all duration-300 ${
-          isFloating ? 'pt-4' : 'pt-6'
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          compactMobile ? 'px-2 pt-2 md:px-6 md:pt-4' : `px-4 md:px-6 ${isFloating ? 'pt-4' : 'pt-6'}`
         }`}
       >
         <div
@@ -120,25 +121,37 @@ export function Navbar() {
                 ? 'glass-nav backdrop-blur-xl rounded-full px-6 py-3'
                 : 'rounded-full bg-white px-6 py-3 shadow-md ring-1 ring-black/5'
               : 'px-2 py-0 bg-transparent'
-          }`}
+          } ${compactMobile ? '!px-3 !py-2 md:!px-6 md:!py-3' : ''}`}
         >
           <Link
             href="/"
-            className={`flex items-center gap-2.5 cursor-pointer transition-colors duration-300 ${textClass}`}
+            className={`flex items-center cursor-pointer transition-all duration-300 ${
+              compactMobile ? 'gap-2 md:gap-2.5' : 'gap-2.5'
+            } ${textClass}`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/logo.png"
               alt="Aeyyyy Traveller's Inn"
-              className="h-10 w-10 rounded-full object-cover shadow-sm ring-1 ring-white/20 md:h-11 md:w-11"
+              className={`rounded-full object-cover shadow-sm ring-1 ring-white/20 transition-all ${
+                compactMobile ? 'h-8 w-8 md:h-11 md:w-11' : 'h-10 w-10 md:h-11 md:w-11'
+              }`}
             />
             <span className="flex flex-col leading-none font-black">
               <span
-                className="text-2xl font-normal tracking-wide [font-family:var(--font-marck-script)]"
+                className={`font-normal tracking-wide [font-family:var(--font-marck-script)] ${
+                  compactMobile ? 'text-xl md:text-2xl' : 'text-2xl'
+                }`}
               >
                 Aeyyyy
               </span>
-              <span className="text-xs tracking-[0.15em] opacity-90">TRAVELLER&apos;S INN</span>
+              <span
+                className={`tracking-[0.15em] opacity-90 ${
+                  compactMobile ? 'text-[9px] md:text-xs' : 'text-xs'
+                }`}
+              >
+                TRAVELLER&apos;S INN
+              </span>
             </span>
           </Link>
 
@@ -177,7 +190,9 @@ export function Navbar() {
           <div className="flex items-center gap-2 md:hidden">
             <Link
               href="/rooms"
-              className="rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-white shadow-lg transition-transform hover:scale-105"
+              className={`rounded-full bg-accent font-semibold text-white shadow-lg transition-all hover:scale-105 ${
+                compactMobile ? 'px-3 py-1.5 text-[11px]' : 'px-3.5 py-2 text-xs'
+              }`}
             >
               Book Now
             </Link>
@@ -188,7 +203,11 @@ export function Navbar() {
               className={`transition-colors duration-300 ${textClass}`}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? (
+                <X className={compactMobile ? 'h-5 w-5' : 'h-6 w-6'} />
+              ) : (
+                <Menu className={compactMobile ? 'h-5 w-5' : 'h-6 w-6'} />
+              )}
             </button>
           </div>
         </div>

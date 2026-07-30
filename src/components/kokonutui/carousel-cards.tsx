@@ -15,7 +15,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -53,7 +52,7 @@ function CarouselCard({ item }: { item: CarouselCardItem }) {
   return (
     <Card
       className={cn(
-        'group relative flex h-[320px] w-full flex-col overflow-hidden rounded-xl border-0 shadow-sm transition-shadow duration-300 hover:shadow-md',
+        'group relative flex h-[285px] w-full flex-col gap-0 overflow-hidden rounded-xl border-0 py-0 shadow-[0_8px_24px_rgba(10,22,40,0.12)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(10,22,40,0.18)] sm:h-[320px]',
         item.disabled && 'opacity-80',
       )}
     >
@@ -136,30 +135,26 @@ export function CarouselSection({
   if (items.length === 0) return null;
 
   return (
-    <div className={cn('w-full py-4', className)}>
-      <div className="mb-2 flex items-center justify-between">
+    <div className={cn('w-full py-2 sm:py-4', className)}>
+      <div className="mb-2 flex items-center justify-between border-b border-[#0a1628]/10 pb-2">
         <h2 className="font-medium text-lg tracking-tight md:text-xl">{title}</h2>
         <div className="flex items-center gap-1">
-          <Button
+          <button
             type="button"
-            className="h-7 w-7 rounded-full border-neutral-200 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
+            className="inline-flex h-7 w-7 items-center justify-center text-[#0a1628]/55 transition-all duration-200 hover:-translate-x-0.5 hover:text-[#0a1628] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a1628]/20"
             onClick={handleScrollLeft}
-            size="icon"
-            variant="outline"
           >
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Scroll left</span>
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            className="h-7 w-7 rounded-full border-neutral-200 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900"
+            className="inline-flex h-7 w-7 items-center justify-center text-[#0a1628]/55 transition-all duration-200 hover:translate-x-0.5 hover:text-[#0a1628] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0a1628]/20"
             onClick={handleScrollRight}
-            size="icon"
-            variant="outline"
           >
             <ChevronRight className="h-4 w-4" />
             <span className="sr-only">Scroll right</span>
-          </Button>
+          </button>
           {viewAllHref ? (
             <Link
               className="ml-1 hidden font-medium text-xs hover:underline md:block"
@@ -172,7 +167,7 @@ export function CarouselSection({
       </div>
 
       <div
-        className="scrollbar-hide -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2"
+        className="scrollbar-hide -mx-1 flex snap-x snap-mandatory scroll-smooth gap-3 overflow-x-auto px-1 pb-5 pt-2"
         ref={scrollContainer}
         style={{
           scrollbarWidth: 'none',
@@ -182,7 +177,7 @@ export function CarouselSection({
         {items.map((item) => {
           const card = <CarouselCard item={item} />;
           return (
-            <div className="w-[240px] flex-none snap-start md:w-[260px]" key={item.id}>
+            <div className="w-[78vw] max-w-[280px] flex-none snap-start sm:w-[240px] md:w-[260px]" key={item.id}>
               {item.href ? (
                 <Link
                   className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"

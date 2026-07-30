@@ -1,9 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import {
@@ -82,10 +81,10 @@ export default function Rooms() {
   }, [category, filtered, rooms]);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen overflow-x-hidden bg-white">
       <Navbar />
 
-      <section className="relative flex min-h-[42vh] items-end overflow-hidden pb-12 pt-28 md:min-h-[48vh] md:pb-16">
+      <section className="relative flex min-h-[34vh] items-end overflow-hidden pb-8 pt-24 sm:min-h-[42vh] sm:pb-12 sm:pt-28 md:min-h-[48vh] md:pb-16">
         <div className="absolute inset-0 z-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -96,13 +95,13 @@ export default function Rooms() {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a1628] via-[#0a1628]/55 to-black/25" />
         </div>
 
-        <div className="container relative z-10 mx-auto px-6">
+        <div className="container relative z-10 mx-auto px-4 sm:px-6">
           <motion.div initial="hidden" animate="visible" variants={fadeInUp} className="max-w-3xl text-white">
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-white/70">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-white/70 sm:mb-3 sm:text-sm">
               Stay with us
             </p>
-            <h1 className="mb-4 text-5xl font-bold tracking-tight md:text-7xl">Rooms</h1>
-            <p className="max-w-xl text-lg font-light text-white/85 md:text-xl">
+            <h1 className="mb-2 text-4xl font-bold tracking-tight sm:mb-4 sm:text-5xl md:text-7xl">Rooms</h1>
+            <p className="max-w-xl text-sm font-light text-white/85 sm:text-lg md:text-xl">
               Quiet sanctuaries curated for rest after the day&apos;s wander — managed live by our
               inn team.
             </p>
@@ -110,34 +109,28 @@ export default function Rooms() {
         </div>
       </section>
 
-      <section className="bg-[#f8fafc] py-20 md:py-28">
-        <div className="container mx-auto px-6">
-          <div className="mb-10 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between">
+      <section className="bg-[#f8fafc] py-10 sm:py-14 md:py-28">
+        <div className="container mx-auto px-3 sm:px-6">
+          <div className="mb-6 md:mb-8">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-[#0a1628] md:text-4xl">
+              <h2 className="text-2xl font-bold tracking-tight text-[#0a1628] sm:text-3xl md:text-4xl">
                 Our rooms
               </h2>
-              <p className="mt-2 max-w-xl text-[#0a1628]/60">
+              <p className="mt-1.5 max-w-xl text-sm text-[#0a1628]/60 sm:mt-2 sm:text-base">
                 Browse by category. Rates shown are per night and update when the admin publishes
                 changes.
               </p>
             </div>
-            <Link
-              href="/book"
-              className="inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
-            >
-              Book a stay <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
           </div>
 
           {categories.length > 1 && (
-            <div className="mb-6 flex flex-wrap gap-2">
+            <div className="mb-4 flex flex-wrap gap-1.5 sm:mb-6 sm:gap-2">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setCategory(cat)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:py-2 sm:text-sm ${
                     category === cat
                       ? 'bg-[#0a1628] text-white'
                       : 'bg-white text-[#0a1628]/70 hover:bg-[#0a1628]/5'

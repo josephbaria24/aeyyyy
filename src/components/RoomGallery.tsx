@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 type RoomGalleryProps = {
@@ -20,6 +21,7 @@ export function RoomGallery({
   tone = 'light',
 }: RoomGalleryProps) {
   const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [fullscreen, setFullscreen] = useState(false);
   const list = images.filter(Boolean);
   const safeIndex = Math.min(index, Math.max(list.length - 1, 0));
@@ -30,8 +32,14 @@ export function RoomGallery({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setFullscreen(false);
-      if (e.key === 'ArrowLeft') setIndex((i) => (i - 1 + list.length) % list.length);
-      if (e.key === 'ArrowRight') setIndex((i) => (i + 1) % list.length);
+      if (e.key === 'ArrowLeft') {
+        setDirection(-1);
+        setIndex((i) => (i - 1 + list.length) % list.length);
+      }
+      if (e.key === 'ArrowRight') {
+        setDirection(1);
+        setIndex((i) => (i + 1) % list.length);
+      }
     };
 
     const prevOverflow = document.body.style.overflow;
@@ -59,7 +67,13 @@ export function RoomGallery({
   }
 
   const go = (dir: -1 | 1) => {
+    setDirection(dir);
     setIndex((i) => (i + dir + list.length) % list.length);
+  };
+
+  const show = (nextIndex: number) => {
+    setDirection(nextIndex >= safeIndex ? 1 : -1);
+    setIndex(nextIndex);
   };
 
   return (
@@ -72,12 +86,20 @@ export function RoomGallery({
             className="absolute inset-0 z-0 block h-full w-full cursor-zoom-in"
             aria-label={`View ${alt} fullscreen`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={current}
-              alt={`${alt} — photo ${safeIndex + 1}`}
-              className="h-full w-full object-cover"
-            />
+            <AnimatePresence initial={false} custom={direction}>
+              <motion.img
+                key={current}
+                src={current}
+                alt={`${alt} — photo ${safeIndex + 1}`}
+                custom={direction}
+                initial={{ x: direction > 0 ? '100%' : '-100%', opacity: 0.75 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: direction > 0 ? '-100%' : '100%', opacity: 0.75 }}
+                transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+              />
+            </AnimatePresence>
           </button>
           {list.length > 1 && (
             <>
@@ -116,7 +138,7 @@ export function RoomGallery({
               <button
                 key={`${src}-${i}`}
                 type="button"
-                onClick={() => setIndex(i)}
+                onClick={() => show(i)}
                 className={cn(
                   'h-14 w-20 shrink-0 overflow-hidden rounded-[7px] ring-2 transition',
                   i === index

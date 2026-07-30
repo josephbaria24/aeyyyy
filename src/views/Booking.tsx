@@ -253,21 +253,21 @@ export default function Booking() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1628] flex flex-col">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-[#0a1628]">
       <Navbar />
 
-      <main className="flex-grow relative pt-32 pb-24 flex items-center justify-center min-h-[900px]">
+      <main className="relative flex min-h-screen flex-grow items-start justify-center pb-8 pt-24 sm:pb-14 sm:pt-28 lg:min-h-[900px] lg:items-center lg:pb-24 lg:pt-32">
         <div className="absolute inset-0 z-0">
           <img src={heroBg} alt="Background" className="w-full h-full object-cover opacity-30" />
           <div className="absolute inset-0 bg-[#0a1628]/80 backdrop-blur-sm"></div>
         </div>
 
-        <div className="container mx-auto px-6 relative z-10 w-full max-w-5xl">
+        <div className="container relative z-10 mx-auto w-full max-w-5xl px-1.5 sm:px-4 md:px-6">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="relative glass-dark p-8 md:p-12 rounded-3xl"
+            className="glass-dark relative rounded-xl p-3 pt-16 sm:rounded-2xl sm:p-6 sm:pt-16 md:rounded-3xl md:p-12"
           >
             <button
               type="button"
@@ -278,15 +278,15 @@ export default function Booking() {
                   router.push('/rooms');
                 }
               }}
-              className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/20 hover:text-white md:left-6 md:top-6"
+              className="absolute left-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/20 hover:text-white sm:left-4 sm:top-4 sm:px-3 sm:py-2 sm:text-sm md:left-6 md:top-6"
             >
               <ArrowLeft className="h-4 w-4" />
               Back
             </button>
 
-            <div className="mb-10 text-center">
-              <h1 className="mb-4 text-4xl font-bold text-white md:text-5xl">Book Your Stay</h1>
-              <p className="text-white/70">Reserve your sanctuary in our curated destinations.</p>
+            <div className="mb-6 text-center sm:mb-8 md:mb-10">
+              <h1 className="mb-2 text-3xl font-bold text-white sm:text-4xl md:mb-4 md:text-5xl">Book Your Stay</h1>
+              <p className="text-sm text-white/70 sm:text-base">Reserve your sanctuary in our curated destinations.</p>
             </div>
 
             {submitted && reference ? (
@@ -328,9 +328,9 @@ export default function Booking() {
                 </div>
               </motion.div>
             ) : (
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-10">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
                 {selectedRoom && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <RoomGallery
                       key={selectedRoom.id}
                       images={roomImages(selectedRoom)}
@@ -410,14 +410,14 @@ export default function Booking() {
                   </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                 {error && (
                   <div className="rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-center text-sm text-red-200">
                     {error}
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
                   <div>
                     <label className="block text-white/80 text-sm mb-2">Full Name</label>
                     <input
@@ -574,16 +574,16 @@ export default function Booking() {
                     name="requests"
                     value={formData.requests}
                     onChange={handleChange}
-                    rows={4}
+                    rows={3}
                     className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-accent transition-colors resize-none"
                   ></textarea>
                 </div>
 
-                <div className="pt-4 text-center">
+                <div className="pt-2 text-center sm:pt-4">
                   <button
                     type="submit"
                     disabled={submitting || availabilityBlocked}
-                    className="bg-accent hover:bg-accent/90 disabled:opacity-60 text-white font-bold rounded-full px-12 py-4 transition-transform hover:scale-105 shadow-lg w-full md:w-auto inline-flex items-center justify-center gap-2"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-8 py-3.5 font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-accent/90 disabled:opacity-60 sm:px-12 sm:py-4 md:w-auto"
                   >
                     {submitting && <Loader2 className="h-5 w-5 animate-spin" />}
                     {submitting
