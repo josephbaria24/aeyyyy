@@ -1,0 +1,17 @@
+export const images = {
+  heroBg: '/images/hero2.png',
+  costaRica: '/images/costa-rica-immersed.jpg',
+  marari: '/images/marari-beach.jpg',
+  thekkady: '/images/thekkady.jpg',
+  alleppey: '/images/alleppey.jpg',
+  kochi: '/images/fort-kochi.jpg',
+  diff1: '/images/pool2.png',
+  diff2: '/images/kitchen.png',
+  corporate: '/images/corporate.jpg',
+  wedding: '/images/wedding.jpg',
+  reception: '/images/reception.jpg',
+  testimonial: '/images/testimonial.jpg',
+  avatar1: '/images/avatar-1.jpg',
+  avatar2: '/images/avatar-2.jpg',
+  avatar3: '/images/avatar-3.jpg',
+} as const;
