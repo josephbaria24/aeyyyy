@@ -81,7 +81,7 @@ export function RoomsTab() {
   const [error, setError] = useState('');
   const [customAmenity, setCustomAmenity] = useState('');
 
-  const presetLabels = new Set(ROOM_AMENITIES.map((a) => a.label));
+  const presetLabels = new Set<string>(ROOM_AMENITIES.map((a) => a.label));
   const customSelected = form.amenities.filter((a) => !presetLabels.has(a));
 
   const startEdit = (room: Room) => {
