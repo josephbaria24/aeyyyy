@@ -72,9 +72,24 @@ export function Footer() {
           <div>
             <h3 className="font-semibold text-lg mb-6">Contact</h3>
             <ul className="space-y-4 text-white/60 text-sm">
-              <li><strong>India:</strong> +91 98765 43210</li>
-              <li><strong>Costa Rica:</strong> +506 8765 4321</li>
-              <li><strong>Email:</strong> reservations@aeyyyytravellersinn.com</li>
+              <li>
+                <strong>Phone:</strong>{' '}
+                <a href="tel:09454139360" className="hover:text-accent">
+                  0945-413-9360
+                </a>
+              </li>
+              <li>
+                <strong>Address:</strong> Macawili Road, Bancao-Bancao, Puerto Princesa City
+              </li>
+              <li>
+                <strong>Email:</strong>{' '}
+                <a
+                  href="mailto:reservations@aeyyyytravellersinn.com"
+                  className="break-all hover:text-accent"
+                >
+                  reservations@aeyyyytravellersinn.com
+                </a>
+              </li>
             </ul>
           </div>
         </div>

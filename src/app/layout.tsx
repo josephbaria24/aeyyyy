@@ -1,9 +1,16 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { Marck_Script } from 'next/font/google';
 
 import { Providers } from './providers';
 import './globals.css';
+
+const marckScript = Marck_Script({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-marck-script',
+});
 
 export const metadata: Metadata = {
   title: "Aeyyyy Traveller's Inn",
@@ -43,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${marckScript.variable}`}
       suppressHydrationWarning
     >
       <body className={`${GeistSans.className} antialiased`}>

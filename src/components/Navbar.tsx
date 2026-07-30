@@ -133,7 +133,11 @@ export function Navbar() {
               className="h-10 w-10 rounded-full object-cover shadow-sm ring-1 ring-white/20 md:h-11 md:w-11"
             />
             <span className="flex flex-col leading-none font-black">
-              <span className="text-xl">Aeyyyy</span>
+              <span
+                className="text-2xl font-normal tracking-wide [font-family:var(--font-marck-script)]"
+              >
+                Aeyyyy
+              </span>
               <span className="text-xs tracking-[0.15em] opacity-90">TRAVELLER&apos;S INN</span>
             </span>
           </Link>
@@ -170,12 +174,23 @@ export function Navbar() {
             </Link>
           </div>
 
-          <button
-            className={`md:hidden transition-colors duration-300 ${textClass}`}
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <div className="flex items-center gap-2 md:hidden">
+            <Link
+              href="/rooms"
+              className="rounded-full bg-accent px-3.5 py-2 text-xs font-semibold text-white shadow-lg transition-transform hover:scale-105"
+            >
+              Book Now
+            </Link>
+            <button
+              type="button"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+              className={`transition-colors duration-300 ${textClass}`}
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </div>
       </motion.nav>
 

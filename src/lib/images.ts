@@ -1,5 +1,5 @@
 export const images = {
-  heroBg: '/images/hero2.png',
+  heroBg: '/images/hero2.webp',
   costaRica: '/images/costa-rica-immersed.jpg',
   marari: '/images/marari-beach.jpg',
   thekkady: '/images/thekkady.jpg',
