@@ -4,6 +4,7 @@ import {
   EVENT_LAYOUTS,
   slugifyEventTitle,
   type EventLayout,
+  type EventListing,
   type SiteEvent,
 } from '@/lib/types/content';
 import { EventTile, eventLayoutHeight } from '@/components/EventTile';
@@ -19,6 +20,12 @@ type PreviewForm = {
   layout: EventLayout;
   sort_order: string;
   is_active: boolean;
+  is_bookable?: boolean;
+  price?: string;
+  capacity?: string;
+  start_time?: string;
+  end_time?: string;
+  listing?: EventListing;
 };
 
 function toPreviewEvent(form: PreviewForm): SiteEvent {
@@ -35,6 +42,12 @@ function toPreviewEvent(form: PreviewForm): SiteEvent {
     layout: form.layout,
     sort_order: Number(form.sort_order) || 0,
     is_active: form.is_active,
+    is_bookable: Boolean(form.is_bookable),
+    price: Number(form.price) || 0,
+    capacity: Math.max(0, Number(form.capacity) || 0),
+    start_time: form.start_time?.trim() || null,
+    end_time: form.end_time?.trim() || null,
+    listing: form.listing ?? 'upcoming',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

@@ -15,6 +15,7 @@ import {
 } from '@/lib/room-status';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
 
 const STATUS_STYLES: Record<RoomLiveStatus, string> = {
   available: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
@@ -71,7 +72,13 @@ export function StatusTab() {
         .update({ availability: next })
         .eq('id', room.id);
       if (error) throw error;
-      await invalidate(['rooms']);
+      await logActivity({
+        action: 'updated',
+        entity: 'room',
+        entityId: room.id,
+        summary: `Marked room “${room.name}” ${next === 'unavailable' ? 'unavailable' : 'open'}`,
+      });
+      await invalidate(['rooms', 'activity']);
       toast.success(next === 'unavailable' ? 'Room marked unavailable' : 'Room marked open', {
         description: room.name,
       });

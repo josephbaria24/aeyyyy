@@ -62,6 +62,8 @@ export type Booking = {
   other_charges: BookingCharge[];
   currency: string;
   notes: string | null;
+  linked_event_booking_id: string | null;
+  linked_event_code: string | null;
   created_at: string;
 };
 
@@ -84,7 +86,11 @@ export type BookingInsert = {
   other_charges?: BookingCharge[];
   currency?: string;
   notes?: string | null;
+  linked_event_booking_id?: string | null;
+  linked_event_code?: string | null;
 };
+
+export type PublicBookingKind = 'room' | 'event';
 
 export type PublicBookingStatus = {
   booking_code: string;
@@ -98,6 +104,7 @@ export type PublicBookingStatus = {
   children: number | null;
   rooms: number;
   created_at: string;
+  kind?: PublicBookingKind;
 };
 
 export function isBookingStatus(value: string): value is BookingStatus {
@@ -183,6 +190,10 @@ export function normalizeBooking(row: Partial<Booking> & Record<string, unknown>
     other_charges: normalizeCharges(row.other_charges),
     currency: String(row.currency ?? 'PHP'),
     notes: (row.notes as string | null) ?? null,
+    linked_event_booking_id: row.linked_event_booking_id
+      ? String(row.linked_event_booking_id)
+      : null,
+    linked_event_code: row.linked_event_code ? String(row.linked_event_code) : null,
     created_at: String(row.created_at ?? ''),
   };
 }

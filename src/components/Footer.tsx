@@ -1,10 +1,22 @@
+'use client';
+
 import Link from 'next/link';
 import { Instagram, Facebook, Twitter, Linkedin } from 'lucide-react';
+import { usePublicSiteSettings } from '@/lib/admin/queries';
+import { DEFAULT_SITE_SETTINGS, phoneHref } from '@/lib/types/site';
 
 export function Footer() {
+  const { data } = usePublicSiteSettings();
+  const s = data ?? DEFAULT_SITE_SETTINGS;
+  const socials = [
+    { href: s.footer_instagram, icon: Instagram, label: 'Instagram' },
+    { href: s.footer_facebook, icon: Facebook, label: 'Facebook' },
+    { href: s.footer_twitter, icon: Twitter, label: 'Twitter' },
+    { href: s.footer_linkedin, icon: Linkedin, label: 'LinkedIn' },
+  ].filter((item) => item.href.trim());
+
   return (
     <footer className="relative bg-[#060d1a] text-white py-20 overflow-hidden">
-      {/* Watermark Logo */}
       <div className="absolute inset-0 flex items-center justify-center opacity-[0.07] pointer-events-none select-none overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -30,23 +42,23 @@ export function Footer() {
                 <span className="text-sm tracking-[0.15em] opacity-90">TRAVELLER&apos;S INN</span>
               </div>
             </div>
-            <p className="text-white/60 text-sm leading-relaxed max-w-xs">
-              Comfortable rooms, a refreshing outdoor pool, and warm hospitality for families, friends, and travelers.
-            </p>
-            <div className="flex space-x-4">
-              <a href="#" className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-accent transition-colors duration-300">
-                <Instagram className="w-4 h-4" />
-              </a>
-              <a href="#" className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-accent transition-colors duration-300">
-                <Facebook className="w-4 h-4" />
-              </a>
-              <a href="#" className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-accent transition-colors duration-300">
-                <Twitter className="w-4 h-4" />
-              </a>
-              <a href="#" className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-accent transition-colors duration-300">
-                <Linkedin className="w-4 h-4" />
-              </a>
-            </div>
+            <p className="text-white/60 text-sm leading-relaxed max-w-xs">{s.footer_blurb}</p>
+            {socials.length > 0 && (
+              <div className="flex space-x-4">
+                {socials.map((item) => (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={item.label}
+                    className="w-10 h-10 rounded-full glass flex items-center justify-center hover:bg-accent transition-colors duration-300"
+                  >
+                    <item.icon className="w-4 h-4" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -54,17 +66,30 @@ export function Footer() {
             <ul className="space-y-4 text-white/60 text-sm">
               <li><Link href="/" className="hover:text-accent cursor-pointer transition-colors">Our Story</Link></li>
               <li><Link href="/rooms" className="hover:text-accent cursor-pointer transition-colors">Rooms</Link></li>
-              <li><Link href="/" className="hover:text-accent cursor-pointer transition-colors">Experiences</Link></li>
-              <li><Link href="/book" className="hover:text-accent cursor-pointer transition-colors">Book Now</Link></li>
+              <li><Link href="/#events" className="hover:text-accent cursor-pointer transition-colors">Events</Link></li>
+              <li><Link href="/book/event" className="hover:text-accent cursor-pointer transition-colors">Book an event</Link></li>
+              <li><Link href="/book" className="hover:text-accent cursor-pointer transition-colors">Book a room</Link></li>
             </ul>
           </div>
 
           <div>
             <h3 className="font-semibold text-lg mb-6">Terms</h3>
             <ul className="space-y-4 text-white/60 text-sm">
-              <li><Link href="/" className="hover:text-accent cursor-pointer transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/" className="hover:text-accent cursor-pointer transition-colors">Terms of Service</Link></li>
-              <li><Link href="/" className="hover:text-accent cursor-pointer transition-colors">Cancellation Policy</Link></li>
+              <li>
+                <Link href={s.footer_privacy_url || '/'} className="hover:text-accent cursor-pointer transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href={s.footer_terms_url || '/'} className="hover:text-accent cursor-pointer transition-colors">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link href={s.footer_cancellation_url || '/'} className="hover:text-accent cursor-pointer transition-colors">
+                  Cancellation Policy
+                </Link>
+              </li>
               <li><Link href="/admin-login" className="hover:text-accent cursor-pointer transition-colors">Admin Area</Link></li>
             </ul>
           </div>
@@ -74,20 +99,17 @@ export function Footer() {
             <ul className="space-y-4 text-white/60 text-sm">
               <li>
                 <strong>Phone:</strong>{' '}
-                <a href="tel:09454139360" className="hover:text-accent">
-                  0945-413-9360
+                <a href={phoneHref(s.footer_phone)} className="hover:text-accent">
+                  {s.footer_phone}
                 </a>
               </li>
               <li>
-                <strong>Address:</strong> Macawili Road, Bancao-Bancao, Puerto Princesa City
+                <strong>Address:</strong> {s.footer_address}
               </li>
               <li>
                 <strong>Email:</strong>{' '}
-                <a
-                  href="mailto:reservations@aeyyyytravellersinn.com"
-                  className="break-all hover:text-accent"
-                >
-                  reservations@aeyyyytravellersinn.com
+                <a href={`mailto:${s.footer_email}`} className="break-all hover:text-accent">
+                  {s.footer_email}
                 </a>
               </li>
             </ul>
@@ -95,7 +117,7 @@ export function Footer() {
         </div>
 
         <div className="pt-8 border-t border-white/10 text-center text-white/40 text-sm">
-          <p>© {new Date().getFullYear()} Aeyyyy Traveller's Inn. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Aeyyyy Traveller&apos;s Inn. All rights reserved.</p>
         </div>
       </div>
     </footer>

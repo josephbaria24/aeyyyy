@@ -15,6 +15,7 @@ export type BookingReferenceData = {
   checkOut: string;
   adults: number;
   children: number;
+  kind?: 'room' | 'event';
 };
 
 function formatDisplayDate(value: string) {
@@ -97,7 +98,7 @@ export function BookingReferenceCard({ data }: BookingReferenceCardProps) {
             </div>
           </div>
           <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-[#ff7a3d]">
-            Booking request reference
+            {data.kind === 'event' ? 'Event booking reference' : 'Booking request reference'}
           </p>
           <p className="mt-1 text-2xl font-bold tracking-wide">{data.bookingCode}</p>
           <p className="mt-1 text-xs text-white/60">Pending confirmation · Show at reception</p>
@@ -107,12 +108,23 @@ export function BookingReferenceCard({ data }: BookingReferenceCardProps) {
           <Row label="Guest" value={data.name} />
           <Row label="Email" value={data.email} />
           {data.phone ? <Row label="Phone" value={data.phone} /> : null}
-          <Row label="Room" value={data.room} />
-          <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-            <Row label="Check-in" value={formatDisplayDate(data.checkIn)} />
-            <Row label="Check-out" value={formatDisplayDate(data.checkOut)} />
-          </div>
-          <Row label="Guests" value={guests} />
+          <Row label={data.kind === 'event' ? 'Event' : 'Room'} value={data.room} />
+          {data.kind === 'event' ? (
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <Row label="From" value={formatDisplayDate(data.checkIn)} />
+              <Row label="Until" value={formatDisplayDate(data.checkOut || data.checkIn)} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              <Row label="Check-in" value={formatDisplayDate(data.checkIn)} />
+              <Row label="Check-out" value={formatDisplayDate(data.checkOut)} />
+            </div>
+          )}
+          <Row label={data.kind === 'event' ? 'Spots' : 'Guests'} value={
+            data.kind === 'event'
+              ? `${data.adults} guest${data.adults === 1 ? '' : 's'}`
+              : guests
+          } />
         </div>
 
         <div className="border-t border-dashed border-slate-200 bg-slate-50 px-6 py-3 text-center text-[11px] text-slate-500">

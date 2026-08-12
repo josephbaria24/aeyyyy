@@ -26,6 +26,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
 
 type ManualForm = {
   name: string;
@@ -223,7 +224,13 @@ export function ManualReservationDialog({
         if (incomeError) incomeWarning = ' Payment was saved, but income could not be recorded.';
       }
 
-      await invalidate(paid > 0 ? ['bookings', 'income'] : ['bookings']);
+      await logActivity({
+        action: 'created',
+        entity: 'booking',
+        entityId: inserted?.id,
+        summary: `Added walk-in booking ${inserted?.booking_code} for ${selectedRoom.name}`,
+      });
+      await invalidate(paid > 0 ? ['bookings', 'income', 'activity'] : ['bookings', 'activity']);
       toast.success('Walk-in reservation created', {
         description: `${inserted.booking_code} · ${form.name.trim()} · ${selectedRoom.name}${incomeWarning}`,
       });

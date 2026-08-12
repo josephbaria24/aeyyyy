@@ -48,4 +48,7 @@ export const adminIcons = {
   photo: 'solar:gallery-bold-duotone',
   visible: 'solar:eye-bold-duotone',
   chevronRight: 'solar:alt-arrow-right-linear',
+  events: 'solar:calendar-mark-bold-duotone',
+  areas: 'solar:layers-bold-duotone',
+  activity: 'solar:history-bold-duotone',
 } as const;

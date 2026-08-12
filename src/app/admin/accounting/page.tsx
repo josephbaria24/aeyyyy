@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ExternalLink, FileImage, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useExpenses, useIncome, useInvalidateAdmin } from '@/lib/admin/queries';
 import { formatMoney, sumBy, SYSTEM_CURRENCY, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
 import { uploadToCloudinary } from '@/lib/upload';
-import type { ExpenseCategory, IncomeCategory } from '@/lib/types/accounting';
+import type { Expense, ExpenseCategory, Income, IncomeCategory } from '@/lib/types/accounting';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
+import { ConfirmDeleteDialog } from '@/components/admin/ConfirmDeleteDialog';
+import { cn } from '@/lib/utils';
 
 const incomeCategories: IncomeCategory[] = ['booking', 'food', 'tour', 'other'];
 const expenseCategories: ExpenseCategory[] = [
@@ -52,6 +55,19 @@ export default function AdminAccountingPage() {
   const [incomeForm, setIncomeForm] = useState(emptyIncome);
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [pendingDeleteIncome, setPendingDeleteIncome] = useState<Income | null>(null);
+  const [pendingDeleteExpense, setPendingDeleteExpense] = useState<Expense | null>(null);
+  const [receiptExpenseId, setReceiptExpenseId] = useState('');
+  const [attachingId, setAttachingId] = useState<string | null>(null);
+
+  const expensesWithReceipts = useMemo(
+    () => expenses.filter((e) => Boolean(e.receipt_url)),
+    [expenses],
+  );
+  const expensesMissingReceipt = useMemo(
+    () => expenses.filter((e) => !e.receipt_url),
+    [expenses],
+  );
 
   const addIncome = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,8 +84,14 @@ export default function AdminAccountingPage() {
         notes: incomeForm.notes || null,
       });
       if (insertError) throw insertError;
+      await logActivity({
+        action: 'created',
+        entity: 'income',
+        summary: `Added income “${incomeForm.title}” (${incomeForm.category})`,
+        details: { amount: Number(incomeForm.amount) },
+      });
       setIncomeForm(emptyIncome);
-      await invalidate(['income']);
+      await invalidate(['income', 'activity']);
       toast.success('Income added');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not add income';
@@ -96,8 +118,14 @@ export default function AdminAccountingPage() {
         receipt_url: expenseForm.receipt_url || null,
       });
       if (insertError) throw insertError;
+      await logActivity({
+        action: 'created',
+        entity: 'expense',
+        summary: `Added expense “${expenseForm.title}” (${expenseForm.category})`,
+        details: { amount: Number(expenseForm.amount) },
+      });
       setExpenseForm(emptyExpense);
-      await invalidate(['expenses']);
+      await invalidate(['expenses', 'activity']);
       toast.success('Expense added');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not add expense';
@@ -115,7 +143,13 @@ export default function AdminAccountingPage() {
       toast.error('Could not delete income', { description: err.message });
       return;
     }
-    await invalidate(['income']);
+    await logActivity({
+      action: 'deleted',
+      entity: 'income',
+      entityId: id,
+      summary: 'Deleted an income record',
+    });
+    await invalidate(['income', 'activity']);
     toast.success('Income deleted');
   };
 
@@ -126,7 +160,13 @@ export default function AdminAccountingPage() {
       toast.error('Could not delete expense', { description: err.message });
       return;
     }
-    await invalidate(['expenses']);
+    await logActivity({
+      action: 'deleted',
+      entity: 'expense',
+      entityId: id,
+      summary: 'Deleted an expense record',
+    });
+    await invalidate(['expenses', 'activity']);
     toast.success('Expense deleted');
   };
 
@@ -144,6 +184,68 @@ export default function AdminAccountingPage() {
       toast.error('Receipt upload failed', { description: message });
     } finally {
       setUploadingReceipt(false);
+    }
+  };
+
+  const attachReceiptToExpense = async (expenseId: string, file: File | null) => {
+    if (!file || !expenseId) {
+      toast.error('Choose an expense, then pick a receipt file');
+      return;
+    }
+    setAttachingId(expenseId);
+    setError('');
+    try {
+      const uploaded = await uploadToCloudinary(file, 'aeyyyy/receipts');
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from('expenses')
+        .update({ receipt_url: uploaded.secure_url })
+        .eq('id', expenseId);
+      if (updateError) throw updateError;
+      const expense = expenses.find((e) => e.id === expenseId);
+      await logActivity({
+        action: 'updated',
+        entity: 'expense',
+        entityId: expenseId,
+        summary: `Attached receipt to expense “${expense?.title ?? expenseId}”`,
+      });
+      await invalidate(['expenses', 'activity']);
+      toast.success('Receipt attached', {
+        description: expense?.title,
+      });
+      setReceiptExpenseId('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not attach receipt';
+      setError(message);
+      toast.error('Could not attach receipt', { description: message });
+    } finally {
+      setAttachingId(null);
+    }
+  };
+
+  const removeReceipt = async (expense: Expense) => {
+    setAttachingId(expense.id);
+    try {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from('expenses')
+        .update({ receipt_url: null })
+        .eq('id', expense.id);
+      if (updateError) throw updateError;
+      await logActivity({
+        action: 'updated',
+        entity: 'expense',
+        entityId: expense.id,
+        summary: `Removed receipt from expense “${expense.title}”`,
+      });
+      await invalidate(['expenses', 'activity']);
+      toast.success('Receipt removed');
+    } catch (err) {
+      toast.error('Could not remove receipt', {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setAttachingId(null);
     }
   };
 
@@ -343,6 +445,157 @@ export default function AdminAccountingPage() {
             </form>
           </div>
 
+          <div className="mb-8 rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-[#0a1628] dark:text-slate-100">Receipts</h2>
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  Upload and attach receipt images or PDFs to expense records.
+                </p>
+              </div>
+              <p className="text-xs font-semibold text-slate-400">
+                {expensesWithReceipts.length} saved
+                {expensesMissingReceipt.length > 0
+                  ? ` · ${expensesMissingReceipt.length} missing`
+                  : ''}
+              </p>
+            </div>
+
+            <div className="mb-5 grid gap-3 rounded-[11px] bg-slate-50 p-4 dark:bg-slate-800/50 md:grid-cols-[1fr_auto] md:items-end">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Attach to expense
+                <select
+                  value={receiptExpenseId}
+                  onChange={(e) => setReceiptExpenseId(e.target.value)}
+                  className="mt-1.5 w-full rounded-[9px] admin-hairline bg-white px-3 py-2.5 text-sm dark:bg-slate-950"
+                >
+                  <option value="">Select an expense…</option>
+                  {expenses.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.expense_date} · {row.title}
+                      {row.receipt_url ? ' (has receipt)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label
+                className={cn(
+                  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900',
+                  (!receiptExpenseId || attachingId) && 'pointer-events-none opacity-50',
+                )}
+              >
+                {attachingId === receiptExpenseId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Upload receipt
+                <input
+                  type="file"
+                  accept="image/*,.pdf,application/pdf"
+                  className="hidden"
+                  disabled={!receiptExpenseId || Boolean(attachingId)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    e.target.value = '';
+                    void attachReceiptToExpense(receiptExpenseId, file);
+                  }}
+                />
+              </label>
+            </div>
+
+            {expenses.length === 0 ? (
+              <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+                Add an expense first, then upload its receipt here.
+              </p>
+            ) : expensesWithReceipts.length === 0 ? (
+              <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+                No receipts yet. Select an expense above and upload a file.
+              </p>
+            ) : (
+              <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {expensesWithReceipts.map((row) => {
+                  const isPdf = /\.pdf($|\?)/i.test(row.receipt_url || '');
+                  return (
+                    <li
+                      key={row.id}
+                      className="overflow-hidden rounded-[11px] admin-hairline bg-slate-50 dark:bg-slate-800/40"
+                    >
+                      <a
+                        href={row.receipt_url!}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block aspect-[4/3] bg-slate-100 dark:bg-slate-800"
+                      >
+                        {isPdf ? (
+                          <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+                            <FileImage className="h-8 w-8" />
+                            <span className="text-xs font-semibold">PDF receipt</span>
+                          </div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={row.receipt_url!}
+                            alt={`Receipt for ${row.title}`}
+                            className="h-full w-full object-cover"
+                          />
+                        )}
+                      </a>
+                      <div className="space-y-2 p-3">
+                        <div>
+                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {row.title}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {row.expense_date} · {formatMoney(Number(row.amount))}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={row.receipt_url!}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded-[7px] admin-hairline bg-white px-2.5 py-1.5 text-[11px] font-semibold dark:bg-slate-900"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Open
+                          </a>
+                          <label className="inline-flex cursor-pointer items-center gap-1 rounded-[7px] admin-hairline bg-white px-2.5 py-1.5 text-[11px] font-semibold dark:bg-slate-900">
+                            {attachingId === row.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Upload className="h-3 w-3" />
+                            )}
+                            Replace
+                            <input
+                              type="file"
+                              accept="image/*,.pdf,application/pdf"
+                              className="hidden"
+                              disabled={Boolean(attachingId)}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] ?? null;
+                                e.target.value = '';
+                                void attachReceiptToExpense(row.id, file);
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={attachingId === row.id}
+                            onClick={() => void removeReceipt(row)}
+                            className="inline-flex items-center gap-1 rounded-[7px] bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-600 dark:bg-rose-950/40"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <div className="overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900">
               <div className="border-b border-slate-200 px-4 py-3 font-bold dark:border-slate-800 text-[#0a1628] dark:text-slate-100">Income Ledger</div>
@@ -366,7 +619,11 @@ export default function AdminAccountingPage() {
                         </td>
                         <td className="px-4 py-3 text-green-600">{formatMoney(Number(row.amount))}</td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => deleteIncome(row.id)} className="text-gray-400 dark:text-slate-500 hover:text-red-500">
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteIncome(row)}
+                            className="text-gray-400 dark:text-slate-500 hover:text-red-500"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
@@ -403,7 +660,7 @@ export default function AdminAccountingPage() {
                         <td className="px-4 py-3">
                           <div className="font-medium">{row.title}</div>
                           <div className="text-xs capitalize text-gray-500 dark:text-slate-400">{row.category}</div>
-                          {row.receipt_url && (
+                          {row.receipt_url ? (
                             <a
                               href={row.receipt_url}
                               target="_blank"
@@ -412,11 +669,35 @@ export default function AdminAccountingPage() {
                             >
                               View receipt
                             </a>
+                          ) : (
+                            <label className="mt-0.5 inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-slate-500 hover:text-accent">
+                              {attachingId === row.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Upload className="h-3 w-3" />
+                              )}
+                              Upload receipt
+                              <input
+                                type="file"
+                                accept="image/*,.pdf,application/pdf"
+                                className="hidden"
+                                disabled={Boolean(attachingId)}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] ?? null;
+                                  e.target.value = '';
+                                  void attachReceiptToExpense(row.id, file);
+                                }}
+                              />
+                            </label>
                           )}
                         </td>
                         <td className="px-4 py-3 text-red-500 dark:text-red-400">{formatMoney(Number(row.amount))}</td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => deleteExpense(row.id)} className="text-gray-400 dark:text-slate-500 hover:text-red-500">
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteExpense(row)}
+                            className="text-gray-400 dark:text-slate-500 hover:text-red-500"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
@@ -436,6 +717,36 @@ export default function AdminAccountingPage() {
           </div>
         </>
       )}
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteIncome != null}
+        onOpenChange={(open) => !open && setPendingDeleteIncome(null)}
+        title="Delete this income?"
+        description={
+          pendingDeleteIncome
+            ? `“${pendingDeleteIncome.title}” (${formatMoney(Number(pendingDeleteIncome.amount))}) will be permanently deleted.`
+            : ''
+        }
+        confirmLabel="Delete income"
+        onConfirm={async () => {
+          if (pendingDeleteIncome) await deleteIncome(pendingDeleteIncome.id);
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteExpense != null}
+        onOpenChange={(open) => !open && setPendingDeleteExpense(null)}
+        title="Delete this expense?"
+        description={
+          pendingDeleteExpense
+            ? `“${pendingDeleteExpense.title}” (${formatMoney(Number(pendingDeleteExpense.amount))}) will be permanently deleted.`
+            : ''
+        }
+        confirmLabel="Delete expense"
+        onConfirm={async () => {
+          if (pendingDeleteExpense) await deleteExpense(pendingDeleteExpense.id);
+        }}
+      />
     </>
   );
 }

@@ -58,6 +58,49 @@ export function AdminDataSync() {
           void queryClient.invalidateQueries({ queryKey: adminKeys.events });
         },
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_bookings' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.eventBookings });
+          void queryClient.invalidateQueries({ queryKey: ['public', 'event-occupancy'] });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_offerings' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.offerings });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'activity_logs' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.activity });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_settings' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.site });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_gallery' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.gallery });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_partners' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: adminKeys.partners });
+        },
+      )
       .subscribe();
 
     return () => {

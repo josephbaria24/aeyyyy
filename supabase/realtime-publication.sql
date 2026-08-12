@@ -14,7 +14,13 @@ begin
     'income',
     'expenses',
     'site_rules',
-    'events'
+    'events',
+    'event_bookings',
+    'activity_logs',
+    'site_settings',
+    'site_gallery',
+    'site_partners',
+    'event_offerings'
   ]
   loop
     if to_regclass('public.' || tbl) is not null then

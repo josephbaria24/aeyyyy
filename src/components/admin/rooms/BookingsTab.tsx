@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Loader2, Receipt, X } from 'lucide-react';
+import { ChevronDown, Link2, Loader2, Receipt, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useBookings, useInvalidateAdmin, useRooms } from '@/lib/admin/queries';
 import { formatMoney, SYSTEM_CURRENCY, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
@@ -28,8 +28,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { adminEventsHref } from '@/lib/admin/events-hub';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
 
 const EMPTY_BOOKINGS: Booking[] = [];
 
@@ -109,13 +111,21 @@ export function BookingsTab({
             booking_id: booking.id,
             notes: `${booking.destination} (${booking.check_in} to ${booking.check_out}) · paid ${formatMoney(paid)} / due ${formatMoney(due)}`,
           });
-          await invalidate(['bookings', 'income']);
+          await invalidate(['bookings', 'income', 'activity']);
         } else {
-          await invalidate(['bookings']);
+          await invalidate(['bookings', 'activity']);
         }
       } else {
-        await invalidate(['bookings']);
+        await invalidate(['bookings', 'activity']);
       }
+
+      await logActivity({
+        action: 'status_changed',
+        entity: 'booking',
+        entityId: id,
+        summary: `Set booking ${booking?.booking_code ?? id} to ${status}`,
+        details: { from: booking?.status, to: status },
+      });
 
       const meta = statusToast[status];
       const description = booking
@@ -167,7 +177,14 @@ export function BookingsTab({
         ...prev,
         [booking.id]: draftFromBooking(saved, rooms),
       }));
-      await invalidate(['bookings']);
+      await logActivity({
+        action: 'updated',
+        entity: 'booking',
+        entityId: booking.id,
+        summary: `Updated payments for booking ${booking.booking_code}`,
+        details: { amount, amount_paid, rate_per_night },
+      });
+      await invalidate(['bookings', 'activity']);
       toast.success('Payments saved', {
         description: `Due ${formatMoney(bookingGrandTotal(saved))} · Unpaid ${formatMoney(bookingUnpaid(saved))}`,
       });
@@ -260,7 +277,20 @@ export function BookingsTab({
                           'bg-amber-50/80 dark:bg-amber-950/30',
                       )}
                     >
-                      <td className="px-3 py-3 font-medium">{booking.booking_code}</td>
+                      <td className="px-3 py-3 font-medium">
+                        <p>{booking.booking_code}</p>
+                        {booking.linked_event_booking_id && (
+                          <Link
+                            href={adminEventsHref('bookings', {
+                              booking: booking.linked_event_booking_id,
+                            })}
+                            className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-800 hover:bg-violet-200 dark:bg-violet-950/50 dark:text-violet-200"
+                          >
+                            <Link2 className="h-3 w-3" />
+                            Event {booking.linked_event_code || 'linked'}
+                          </Link>
+                        )}
+                      </td>
                       <td className="px-3 py-3">
                         <div className="font-medium text-[#0a1628] dark:text-slate-100">
                           {booking.name}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BookNowButton } from '@/components/BookNowChooser';
 
 function parseRgb(color: string): [number, number, number, number] | null {
   const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
@@ -164,6 +165,9 @@ export function Navbar() {
             <Link href="/rooms" className="hover:text-accent transition-colors">
               Rooms
             </Link>
+            <Link href="/#events" className="hover:text-accent transition-colors">
+              Events
+            </Link>
             <Link href="/" className="hover:text-accent transition-colors">
               Contact Us
             </Link>
@@ -179,23 +183,15 @@ export function Navbar() {
             <button className={`hover:text-accent transition-colors duration-300 ${textClass}`}>
               <Search className="w-5 h-5" />
             </button>
-            <Link
-              href="/rooms"
-              className="bg-accent text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform duration-300 cursor-pointer shadow-lg hover:shadow-accent/50 inline-block"
-            >
-              Book Now
-            </Link>
+            <BookNowButton className="bg-accent text-white px-6 py-2 rounded-full font-semibold hover:scale-105 transition-transform duration-300 cursor-pointer shadow-lg hover:shadow-accent/50 inline-block" />
           </div>
 
           <div className="flex items-center gap-2 md:hidden">
-            <Link
-              href="/rooms"
+            <BookNowButton
               className={`rounded-full bg-accent font-semibold text-white shadow-lg transition-all hover:scale-105 ${
                 compactMobile ? 'px-3 py-1.5 text-[11px]' : 'px-3.5 py-2 text-xs'
               }`}
-            >
-              Book Now
-            </Link>
+            />
             <button
               type="button"
               aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
@@ -227,18 +223,23 @@ export function Navbar() {
             <Link href="/rooms" className="text-white text-xl font-medium">
               Rooms
             </Link>
+            <Link
+              href="/#events"
+              className="text-white text-xl font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Events
+            </Link>
             <Link href="/" className="text-white text-xl font-medium">
               Contact Us
             </Link>
             <Link href="/#booking-status" className="text-white text-xl font-medium">
               Check booking
             </Link>
-            <Link
-              href="/rooms"
+            <BookNowButton
               className="bg-accent text-white px-8 py-3 rounded-full font-semibold text-lg inline-block"
-            >
-              Book Now
-            </Link>
+              onOpen={() => setMobileMenuOpen(false)}
+            />
           </motion.div>
         )}
       </AnimatePresence>

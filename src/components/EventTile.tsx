@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { EventShareButtons } from '@/components/EventShareButtons';
-import type { EventLayout, SiteEvent } from '@/lib/types/content';
+import { formatEventTimeRange, type EventLayout, type SiteEvent } from '@/lib/types/content';
+import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 
 export function formatEventDate(value: string | null | undefined) {
@@ -38,6 +40,7 @@ export function EventTile({
   hideShare = false,
 }: EventTileProps) {
   const dateLabel = formatEventDate(event.event_date);
+  const timeLabel = formatEventTimeRange(event.start_time, event.end_time);
 
   const body = (
     <>
@@ -56,7 +59,9 @@ export function EventTile({
         <div className="max-w-2xl rounded-[10px] bg-black/45 px-4 py-3 backdrop-blur-[2px] md:px-5 md:py-4">
           <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
             {dateLabel && <span>{dateLabel}</span>}
-            {dateLabel && event.location && <span aria-hidden>·</span>}
+            {dateLabel && (timeLabel || event.location) && <span aria-hidden>·</span>}
+            {timeLabel && <span className="normal-case tracking-normal text-white/80">{timeLabel}</span>}
+            {timeLabel && event.location && <span aria-hidden>·</span>}
             {event.location && (
               <span className="normal-case tracking-normal text-white/80">{event.location}</span>
             )}
@@ -72,7 +77,17 @@ export function EventTile({
               {event.description}
             </p>
           )}
-          {!hideShare && event.slug ? <EventShareButtons event={event} /> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {event.is_bookable && event.slug && !hideShare ? (
+              <Link
+                href={`/book/event?slug=${encodeURIComponent(event.slug)}`}
+                className="inline-flex items-center rounded-full bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-accent/90"
+              >
+                Book{event.price > 0 ? ` · ${formatMoney(event.price)}` : ''}
+              </Link>
+            ) : null}
+            {!hideShare && event.slug ? <EventShareButtons event={event} /> : null}
+          </div>
         </div>
       </div>
     </>

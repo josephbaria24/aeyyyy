@@ -45,6 +45,8 @@ export default function Booking() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomParam = searchParams.get('room')?.trim() || '';
+  const eventBookingId = searchParams.get('eventBookingId')?.trim() || '';
+  const eventCode = searchParams.get('eventCode')?.trim() || '';
   const { data: activeRooms = [] } = useActiveRooms();
   const { data: occupancyStays = [] } = useOccupancyStays();
   const today = todayIsoLocal();
@@ -67,21 +69,22 @@ export default function Booking() {
   }, [activeRooms]);
 
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
+    name: searchParams.get('name')?.trim() || '',
+    email: searchParams.get('email')?.trim() || '',
+    phone: searchParams.get('phone')?.trim() || '',
     destination: roomParam || destinations[0] || 'Costa Rica',
-    checkIn: '',
-    checkOut: '',
-    adults: '2',
+    checkIn: searchParams.get('checkIn')?.trim() || '',
+    checkOut: searchParams.get('checkOut')?.trim() || '',
+    adults: searchParams.get('adults')?.trim() || '2',
     children: '0',
-    requests: '',
+    requests: eventCode ? `Linked to event ${eventCode}` : '',
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [bookingCode, setBookingCode] = useState('');
   const [reference, setReference] = useState<BookingReferenceData | null>(null);
+  const [linkedFromEvent] = useState(Boolean(eventBookingId && eventCode));
 
   const selectedRoom = useMemo(
     () => activeRooms.find((r) => r.name === formData.destination) ?? null,
@@ -150,6 +153,10 @@ export default function Booking() {
     try {
       const supabase = createClient();
       const code = makeBookingCode();
+      const roomBookingId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : undefined;
       const room =
         activeRooms.find((r) => r.name === formData.destination) ?? selectedRoom;
       const rate = room ? Number(room.price_per_night) || 0 : 0;
@@ -178,8 +185,12 @@ export default function Booking() {
           `Those dates overlap a confirmed stay (${availability.stay.check_in} → ${availability.stay.check_out}). Please pick different dates.`,
         );
       }
+      if (!roomBookingId) {
+        throw new Error('Could not create booking id. Please try again.');
+      }
 
       const { error: insertError } = await supabase.from('bookings').insert({
+        id: roomBookingId,
         booking_code: code,
         name: formData.name,
         email: formData.email,
@@ -197,9 +208,40 @@ export default function Booking() {
         amount_paid: 0,
         other_charges: [],
         currency: SYSTEM_CURRENCY,
+        ...(eventBookingId && eventCode
+          ? {
+              linked_event_booking_id: eventBookingId,
+              linked_event_code: eventCode,
+            }
+          : {}),
       });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        throw new Error(
+          `${insertError.message}${
+            insertError.message.includes('linked_event')
+              ? ' — run supabase/booking-link-schema.sql'
+              : ''
+          }`,
+        );
+      }
+
+      if (eventBookingId && eventCode) {
+        try {
+          await fetch('/api/link-event-room', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventBookingId,
+              eventCode,
+              roomBookingId,
+              roomCode: code,
+            }),
+          });
+        } catch {
+          // Room booking still succeeded; admin can link manually if reverse sync fails.
+        }
+      }
 
       const refData: BookingReferenceData = {
         bookingCode: code,
@@ -288,6 +330,15 @@ export default function Booking() {
               <h1 className="mb-2 text-3xl font-bold text-white sm:text-4xl md:mb-4 md:text-5xl">Book Your Stay</h1>
               <p className="text-sm text-white/70 sm:text-base">Reserve your sanctuary in our curated destinations.</p>
             </div>
+
+            {linkedFromEvent && !submitted && (
+              <div className="mb-6 rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 text-left sm:px-5">
+                <p className="text-sm font-semibold text-white">Linked to your event {eventCode}</p>
+                <p className="mt-1 text-xs text-white/70 sm:text-sm">
+                  Guest details and dates were filled from your area booking. Choose a room to stay overnight.
+                </p>
+              </div>
+            )}
 
             {submitted && reference ? (
               <motion.div

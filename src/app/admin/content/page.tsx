@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Crop, Loader2, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
+import { Crop, ExternalLink, Loader2, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   useEvents,
@@ -12,8 +12,10 @@ import { uploadToCloudinary } from '@/lib/upload';
 import { prepareCropSource, readFileAsDataUrl } from '@/lib/crop-image';
 import {
   EVENT_LAYOUTS,
+  EVENT_LISTINGS,
   slugifyEventTitle,
   type EventLayout,
+  type EventListing,
   type SiteEvent,
   type SiteRule,
 } from '@/lib/types/content';
@@ -22,8 +24,14 @@ import { cn } from '@/lib/utils';
 import { EventLandingPreview } from '@/components/admin/EventLandingPreview';
 import { ImageCropDialog } from '@/components/admin/ImageCropDialog';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
+import { HomepageTab } from '@/components/admin/content/HomepageTab';
+import { GalleryTab } from '@/components/admin/content/GalleryTab';
+import { PartnersTab } from '@/components/admin/content/PartnersTab';
+import { FooterTab } from '@/components/admin/content/FooterTab';
+import { ConfirmDeleteDialog } from '@/components/admin/ConfirmDeleteDialog';
 
-type Tab = 'rules' | 'events';
+type Tab = 'homepage' | 'gallery' | 'partners' | 'events' | 'footer' | 'rules';
 
 const emptyRule = { title: '', body: '', sort_order: '0', is_active: true };
 const emptyEvent = {
@@ -36,6 +44,12 @@ const emptyEvent = {
   layout: 'card' as EventLayout,
   sort_order: '0',
   is_active: true,
+  is_bookable: false,
+  price: '',
+  capacity: '',
+  start_time: '',
+  end_time: '',
+  listing: 'upcoming' as EventListing,
 };
 
 function layoutCropAspect(layout: EventLayout) {
@@ -45,7 +59,7 @@ function layoutCropAspect(layout: EventLayout) {
 }
 
 export default function AdminContentPage() {
-  const [tab, setTab] = useState<Tab>('rules');
+  const [tab, setTab] = useState<Tab>('homepage');
   const rulesQuery = useRules();
   const eventsQuery = useEvents();
   const invalidate = useInvalidateAdmin();
@@ -62,6 +76,8 @@ export default function AdminContentPage() {
   const [shareNote, setShareNote] = useState('');
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [pendingDeleteRule, setPendingDeleteRule] = useState<SiteRule | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<SiteEvent | null>(null);
   const saveRule = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -79,13 +95,25 @@ export default function AdminContentPage() {
       if (editingRuleId) {
         const { error: err } = await supabase.from('site_rules').update(payload).eq('id', editingRuleId);
         if (err) throw err;
+        await logActivity({
+          action: 'updated',
+          entity: 'rule',
+          entityId: editingRuleId,
+          summary: `Updated rule “${payload.title}”`,
+        });
       } else {
-        const { error: err } = await supabase.from('site_rules').insert(payload);
+        const { data, error: err } = await supabase.from('site_rules').insert(payload).select('id').single();
         if (err) throw err;
+        await logActivity({
+          action: 'created',
+          entity: 'rule',
+          entityId: data?.id,
+          summary: `Added rule “${payload.title}”`,
+        });
       }
       setEditingRuleId(null);
       setRuleForm(emptyRule);
-      await invalidate(['rules']);
+      await invalidate(['rules', 'activity']);
       toast.success(editingRuleId ? 'Rule updated' : 'Rule added');
     } catch (err) {
       const message =
@@ -110,18 +138,23 @@ export default function AdminContentPage() {
   };
 
   const deleteRule = async (id: string) => {
-    if (!window.confirm('Delete this rule?')) return;
     const supabase = createClient();
     const { error: err } = await supabase.from('site_rules').delete().eq('id', id);
     if (err) {
       toast.error('Could not delete rule', { description: err.message });
       return;
     }
+    await logActivity({
+      action: 'deleted',
+      entity: 'rule',
+      entityId: id,
+      summary: 'Deleted a site rule',
+    });
     if (editingRuleId === id) {
       setEditingRuleId(null);
       setRuleForm(emptyRule);
     }
-    await invalidate(['rules']);
+    await invalidate(['rules', 'activity']);
     toast.success('Rule deleted');
   };
 
@@ -173,24 +206,44 @@ export default function AdminContentPage() {
         layout: eventForm.layout,
         sort_order: Number(eventForm.sort_order) || 0,
         is_active: eventForm.is_active,
+        is_bookable: eventForm.is_bookable,
+        price: Number(eventForm.price) || 0,
+        capacity: Math.max(0, Number(eventForm.capacity) || 0),
+        start_time: eventForm.start_time || null,
+        end_time: eventForm.end_time || null,
+        listing: eventForm.listing,
       };
       if (!payload.title || !payload.slug) throw new Error('Event title is required');
 
       if (editingEventId) {
         const { error: err } = await supabase.from('events').update(payload).eq('id', editingEventId);
         if (err) throw err;
+        await logActivity({
+          action: 'updated',
+          entity: 'event',
+          entityId: editingEventId,
+          summary: `Updated event “${payload.title}”`,
+          details: { is_bookable: payload.is_bookable, price: payload.price },
+        });
       } else {
-        const { error: err } = await supabase.from('events').insert(payload);
+        const { data, error: err } = await supabase.from('events').insert(payload).select('id').single();
         if (err) throw err;
+        await logActivity({
+          action: 'created',
+          entity: 'event',
+          entityId: data?.id,
+          summary: `Added event “${payload.title}”`,
+          details: { is_bookable: payload.is_bookable },
+        });
       }
       setEditingEventId(null);
       setEventForm(emptyEvent);
-      await invalidate(['events']);
+      await invalidate(['events', 'activity']);
       toast.success(editingEventId ? 'Event updated' : 'Event added');
     } catch (err) {
       const message =
         err instanceof Error
-          ? `${err.message} — run supabase/content-schema.sql if tables are missing.`
+          ? `${err.message} — run supabase/content-schema.sql and supabase/events-booking-schema.sql if columns are missing.`
           : 'Could not save event';
       setError(message);
       toast.error('Could not save event', { description: message });
@@ -211,22 +264,33 @@ export default function AdminContentPage() {
       layout: event.layout,
       sort_order: String(event.sort_order),
       is_active: event.is_active,
+      is_bookable: event.is_bookable,
+      price: event.price ? String(event.price) : '',
+      capacity: event.capacity ? String(event.capacity) : '',
+      start_time: event.start_time ?? '',
+      end_time: event.end_time ?? '',
+      listing: event.listing,
     });
   };
 
   const deleteEvent = async (id: string) => {
-    if (!window.confirm('Delete this event?')) return;
     const supabase = createClient();
     const { error: err } = await supabase.from('events').delete().eq('id', id);
     if (err) {
       toast.error('Could not delete event', { description: err.message });
       return;
     }
+    await logActivity({
+      action: 'deleted',
+      entity: 'event',
+      entityId: id,
+      summary: 'Deleted an event',
+    });
     if (editingEventId === id) {
       setEditingEventId(null);
       setEventForm(emptyEvent);
     }
-    await invalidate(['events']);
+    await invalidate(['events', 'activity']);
     toast.success('Event deleted');
   };
 
@@ -265,28 +329,48 @@ export default function AdminContentPage() {
         </div>
       )}
 
-      <div className="mb-6 flex gap-2">
-        {(
-          [
-            ['rules', 'Rules & Regulations'],
-            ['events', 'Events'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={cn(
-              'rounded-[9px] px-4 py-2 text-sm font-semibold transition',
-              tab === id
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                : 'bg-white text-slate-600 admin-hairline hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300',
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ['homepage', 'Homepage'],
+              ['gallery', 'Gallery'],
+              ['partners', 'Partners'],
+              ['events', 'Events'],
+              ['footer', 'Footer'],
+              ['rules', 'Rules'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={cn(
+                'rounded-[9px] px-4 py-2 text-sm font-semibold transition',
+                tab === id
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-white text-slate-600 admin-hairline hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <a
+          href={tab === 'events' ? '/#events' : tab === 'rules' ? '/#rules' : '/'}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-[9px] admin-hairline bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Preview landing page
+        </a>
       </div>
+
+      {tab === 'homepage' && <HomepageTab />}
+      {tab === 'gallery' && <GalleryTab />}
+      {tab === 'partners' && <PartnersTab />}
+      {tab === 'footer' && <FooterTab />}
 
       {tab === 'rules' && (
         <div className="space-y-6">
@@ -374,7 +458,7 @@ export default function AdminContentPage() {
                       <button type="button" onClick={() => startEditRule(rule)} className="rounded-[5px] bg-slate-100 p-2 dark:bg-slate-800">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => void deleteRule(rule.id)} className="rounded-[5px] bg-rose-50 p-2 text-rose-600 dark:bg-rose-950/40">
+                      <button type="button" onClick={() => setPendingDeleteRule(rule)} className="rounded-[5px] bg-rose-50 p-2 text-rose-600 dark:bg-rose-950/40">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -512,6 +596,84 @@ export default function AdminContentPage() {
                     </div>
                   )}
                 </div>
+                <input
+                  type="time"
+                  value={eventForm.start_time}
+                  onChange={(e) => setEventForm({ ...eventForm, start_time: e.target.value })}
+                  className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950 dark:text-slate-100"
+                />
+                <input
+                  type="time"
+                  value={eventForm.end_time}
+                  onChange={(e) => setEventForm({ ...eventForm, end_time: e.target.value })}
+                  className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950 dark:text-slate-100"
+                />
+                <div className="md:col-span-2">
+                  <p className="mb-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Show under
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {EVENT_LISTINGS.map((l) => (
+                      <button
+                        key={l.value}
+                        type="button"
+                        onClick={() => setEventForm({ ...eventForm, listing: l.value })}
+                        className={cn(
+                          'rounded-[9px] px-3 py-2.5 text-left transition',
+                          eventForm.listing === l.value
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                            : 'admin-hairline bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-950 dark:text-slate-300',
+                        )}
+                      >
+                        <span className="block text-sm font-semibold">{l.label}</span>
+                        <span
+                          className={cn(
+                            'mt-0.5 block text-[11px]',
+                            eventForm.listing === l.value
+                              ? 'text-white/70 dark:text-slate-500'
+                              : 'text-slate-400',
+                          )}
+                        >
+                          {l.hint}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-[9px] admin-hairline bg-slate-50 p-3 md:col-span-2 dark:bg-slate-950">
+                  <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Booking
+                  </p>
+                  <label className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={eventForm.is_bookable}
+                      onChange={(e) =>
+                        setEventForm({ ...eventForm, is_bookable: e.target.checked })
+                      }
+                    />
+                    Guests can book this event
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Price per guest"
+                      value={eventForm.price}
+                      onChange={(e) => setEventForm({ ...eventForm, price: e.target.value })}
+                      className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950 dark:text-slate-100"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="Capacity (0 = unlimited)"
+                      value={eventForm.capacity}
+                      onChange={(e) => setEventForm({ ...eventForm, capacity: e.target.value })}
+                      className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 md:col-span-2">
                   <input
                     type="checkbox"
@@ -573,7 +735,14 @@ export default function AdminContentPage() {
                           </span>
                         </p>
                         <p className="text-xs text-slate-500">
-                          {[event.event_date, event.location].filter(Boolean).join(' · ') || 'No date set'}
+                          {[
+                            event.listing,
+                            event.event_date,
+                            event.location,
+                            event.is_bookable ? 'Bookable' : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || 'No date set'}
                         </p>
                       </div>
                     </div>
@@ -588,7 +757,7 @@ export default function AdminContentPage() {
                       <button type="button" onClick={() => startEditEvent(event)} className="rounded-[5px] bg-slate-100 p-2 dark:bg-slate-800">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => void deleteEvent(event.id)} className="rounded-[5px] bg-rose-50 p-2 text-rose-600 dark:bg-rose-950/40">
+                      <button type="button" onClick={() => setPendingDeleteEvent(event)} className="rounded-[5px] bg-rose-50 p-2 text-rose-600 dark:bg-rose-950/40">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -616,6 +785,36 @@ export default function AdminContentPage() {
           onConfirm={uploadCroppedEventImage}
         />
       )}
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteRule != null}
+        onOpenChange={(open) => !open && setPendingDeleteRule(null)}
+        title="Delete this rule?"
+        description={
+          pendingDeleteRule
+            ? `“${pendingDeleteRule.title}” will be permanently deleted.`
+            : ''
+        }
+        confirmLabel="Delete rule"
+        onConfirm={async () => {
+          if (pendingDeleteRule) await deleteRule(pendingDeleteRule.id);
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={pendingDeleteEvent != null}
+        onOpenChange={(open) => !open && setPendingDeleteEvent(null)}
+        title="Delete this event?"
+        description={
+          pendingDeleteEvent
+            ? `“${pendingDeleteEvent.title}” will be permanently deleted from the homepage listings.`
+            : ''
+        }
+        confirmLabel="Delete event"
+        onConfirm={async () => {
+          if (pendingDeleteEvent) await deleteEvent(pendingDeleteEvent.id);
+        }}
+      />
     </>
   );
 }

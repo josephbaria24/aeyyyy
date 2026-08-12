@@ -107,3 +107,11 @@ drop policy if exists "Authenticated manage events" on public.events;
 create policy "Authenticated manage events"
   on public.events for all to authenticated
   using (true) with check (true);
+
+-- Bookable event fields (also in events-booking-schema.sql)
+alter table public.events
+  add column if not exists is_bookable boolean not null default false,
+  add column if not exists price numeric(12,2) not null default 0,
+  add column if not exists capacity integer not null default 0,
+  add column if not exists start_time text,
+  add column if not exists end_time text;

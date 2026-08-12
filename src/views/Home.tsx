@@ -9,39 +9,37 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { EventTile, eventLayoutHeight } from '@/components/EventTile';
 import { BookingStatusChecker } from '@/components/BookingStatusChecker';
-import { useActiveEvents, useActiveRules } from '@/lib/admin/queries';
+import {
+  useActiveEvents,
+  useActiveGallery,
+  useActivePartners,
+  useActiveRules,
+  usePublicSiteSettings,
+} from '@/lib/admin/queries';
+import { DEFAULT_GALLERY, DEFAULT_SITE_SETTINGS, phoneHref } from '@/lib/types/site';
+import type { SiteEvent } from '@/lib/types/content';
 import { 
   Waves, BedDouble, UsersRound, ConciergeBell, ArrowRight, ChevronLeft, ChevronRight,
   MapPin, Phone, CheckCircle2, ScrollText, X
 } from 'lucide-react';
-import { images } from '@/lib/images';
-
-const heroBg = images.heroBg;
-const entranceImg = '/images/gate.png';
-const kitchenImg = '/images/kitchen.png';
-const poolHeroImg = '/images/hero2.webp';
-const hallwayImg = '/images/hallway.png';
-const diff1Img = images.diff1;
-const diff2Img = images.diff2;
-
-const hotelGallery = [
-  { img: entranceImg, title: 'A Warm Welcome', sub: 'Hotel Entrance' },
-  { img: kitchenImg, title: 'Guest Kitchen', sub: 'Convenient Amenities' },
-  { img: poolHeroImg, title: 'Poolside Relaxation', sub: 'Rest & Recharge' },
-  { img: hallwayImg, title: 'Clean Hotel Hallways', sub: 'Bright & Welcoming' },
-  { img: '/images/beds.png', title: 'Comfortable Rooms', sub: 'Rest Easy' },
-  { img: '/images/band area.png', title: 'Music & Entertainment', sub: 'Band Area' },
-  { img: '/images/reception.png', title: 'Relaxing Common Areas', sub: 'Guest Lounge' },
-];
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 40 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: 'easeOut' } },
 };
 
 export default function Home() {
   const { data: rules = [] } = useActiveRules();
   const { data: events = [] } = useActiveEvents();
+  const { data: settingsData } = usePublicSiteSettings();
+  const { data: galleryData } = useActiveGallery();
+  const { data: partners = [] } = useActivePartners();
+  const s = settingsData ?? DEFAULT_SITE_SETTINGS;
+  const hotelGallery = (galleryData?.length ? galleryData : DEFAULT_GALLERY).map((item) => ({
+    img: item.image_url,
+    title: item.title,
+    sub: item.subtitle || '',
+  }));
   const [galleryRef, galleryApi] = useEmblaCarousel({
     align: 'start',
     loop: true,
@@ -83,16 +81,16 @@ export default function Home() {
     };
   }, [fullscreenIndex, lightboxApi]);
 
-  const featured = useMemo(
-    () => events.filter((e) => e.layout === 'featured'),
+  const upcoming = useMemo(
+    () => events.filter((e) => e.listing === 'upcoming'),
     [events],
   );
-  const wide = useMemo(
-    () => events.filter((e) => e.layout === 'wide'),
+  const recent = useMemo(
+    () => events.filter((e) => e.listing === 'recent'),
     [events],
   );
-  const cards = useMemo(
-    () => events.filter((e) => e.layout === 'card' || !e.layout),
+  const past = useMemo(
+    () => events.filter((e) => e.listing === 'past'),
     [events],
   );
 
@@ -104,7 +102,7 @@ export default function Home() {
       <section className="relative h-screen min-h-[800px] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <Image
-            src={heroBg}
+            src={s.hero_image_url}
             alt="Aeyyyy Traveller's Inn swimming pool"
             fill
             priority
@@ -122,11 +120,11 @@ export default function Home() {
             className="max-w-4xl text-white mb-12"
           >
             <h1 className="text-6xl md:text-8xl font-bold mb-4 tracking-tight">
-              Relax, Stay &amp; Swim <br/>
-              <span className="font-light italic">at Aeyyyy Traveller&apos;s Inn</span>
+              {s.hero_title} <br/>
+              <span className="font-light italic">{s.hero_italic}</span>
             </h1>
             <p className="text-xl md:text-2xl text-white/90 max-w-2xl font-light">
-              Comfortable rooms, refreshing poolside moments, and warm hospitality for a stay that feels like home.
+              {s.hero_subtitle}
             </p>
           </motion.div>
 
@@ -140,7 +138,7 @@ export default function Home() {
               <div className="flex min-w-0 flex-col">
                 <span className="text-xs uppercase tracking-wider text-white/60">Find us at</span>
                 <span className="font-medium leading-snug">
-                  Macawili Road, Bancao-Bancao, Puerto Princesa City
+                  {s.hero_address}
                 </span>
               </div>
             </div>
@@ -148,8 +146,8 @@ export default function Home() {
               <Phone className="w-5 h-5 mr-3 text-white" />
               <div className="flex flex-col">
                 <span className="text-xs uppercase tracking-wider text-white/60">Call us</span>
-                <a href="tel:09454139360" className="font-medium hover:text-accent">
-                  0945-413-9360
+                <a href={phoneHref(s.hero_phone)} className="font-medium hover:text-accent">
+                  {s.hero_phone}
                 </a>
               </div>
             </div>
@@ -197,10 +195,10 @@ export default function Home() {
           <div className="flex flex-col gap-12 lg:flex-row">
             <div className="lg:w-1/3">
               <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeInUp}>
-                <span className="text-accent uppercase tracking-widest text-sm font-bold mb-2 block">By Aeyyyy Traveller's Inn</span>
-                <h2 className="text-4xl md:text-5xl font-bold mb-6">Hotel &amp; Poolside Comfort</h2>
+                <span className="text-accent uppercase tracking-widest text-sm font-bold mb-2 block">{s.gallery_kicker}</span>
+                <h2 className="text-4xl md:text-5xl font-bold mb-6">{s.gallery_title}</h2>
                 <p className="text-white/70 leading-relaxed text-lg mb-8">
-                  Settle into a comfortable room, take a refreshing swim, and enjoy an easygoing stay with the people who matter most.
+                  {s.gallery_body}
                 </p>
                 <Link href="/book">
                   <button type="button" className="flex items-center text-accent font-semibold hover:text-white transition-colors duration-300 group">
@@ -216,7 +214,7 @@ export default function Home() {
                   <div className="-ml-5 flex touch-pan-y">
                     {hotelGallery.map((item, idx) => (
                       <div
-                        key={item.img}
+                        key={`${item.img}-${idx}`}
                         className="min-w-0 flex-[0_0_100%] pl-5 md:flex-[0_0_50%]"
                       >
                         <motion.button
@@ -307,9 +305,9 @@ export default function Home() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex h-full touch-pan-y">
-              {hotelGallery.map((item) => (
+              {hotelGallery.map((item, idx) => (
                 <div
-                  key={`fullscreen-${item.img}`}
+                  key={`fullscreen-${item.img}-${idx}`}
                   className="flex h-full min-w-0 flex-[0_0_100%] items-center justify-center px-2 md:px-12"
                 >
                   <img
@@ -361,16 +359,16 @@ export default function Home() {
           <div className="flex flex-col items-center gap-9 md:gap-12 lg:flex-row lg:gap-16">
             <div className="lg:w-1/2">
               <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeInUp}>
-                <h2 className="mb-4 text-3xl font-bold text-[#0a1628] md:mb-6 md:text-5xl">The difference is Aeyyyy Traveller's Inn</h2>
+                <h2 className="mb-4 text-3xl font-bold text-[#0a1628] md:mb-6 md:text-5xl">{s.difference_title}</h2>
                 <p className="mb-6 text-sm leading-relaxed text-gray-600 md:mb-10 md:text-lg">
-                  We make every stay simple, comfortable, and welcoming. From restful rooms to relaxing afternoons by the pool, our team is here to help you feel at home.
+                  {s.difference_body}
                 </p>
 
                 <div className="space-y-4 md:space-y-8">
                   {[
-                    { title: "Warm Hospitality", desc: "Friendly, attentive service that makes every guest feel welcome." },
-                    { title: "Poolside Relaxation", desc: "A refreshing outdoor pool for swimming, lounging, and family time." },
-                    { title: "Everyday Comfort", desc: "Clean rooms, useful amenities, and peaceful spaces for a restful stay." }
+                    { title: s.difference_point_1_title, desc: s.difference_point_1_body },
+                    { title: s.difference_point_2_title, desc: s.difference_point_2_body },
+                    { title: s.difference_point_3_title, desc: s.difference_point_3_body },
                   ].map((highlight, idx) => (
                     <div key={idx} className="flex items-start">
                       <div className="mr-3 mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#e8f4f8] text-[#00b8d9] md:mr-4 md:h-12 md:w-12">
@@ -389,47 +387,68 @@ export default function Home() {
             <div className="relative min-h-[360px] w-full md:min-h-[600px] lg:w-1/2">
               <motion.img 
                 initial={{ opacity: 0, x: 50 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }} viewport={{ once: true }}
-                src={diff1Img} alt="Luxury Poolside" className="absolute right-0 top-0 z-10 h-[240px] w-4/5 rounded-2xl object-cover shadow-2xl md:h-[400px] md:w-3/4 md:rounded-3xl" 
+                src={s.difference_image_1} alt="Aeyyyy Traveller's Inn" className="absolute right-0 top-0 z-10 h-[240px] w-4/5 rounded-2xl object-cover shadow-2xl md:h-[400px] md:w-3/4 md:rounded-3xl" 
               />
               <motion.img 
                 initial={{ opacity: 0, x: -50 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.2 }} viewport={{ once: true }}
-                src={diff2Img} alt="Hotel dining and kitchen area" className="absolute bottom-0 left-0 z-20 h-[200px] w-3/4 rounded-2xl object-cover shadow-2xl md:h-[350px] md:w-2/3 md:rounded-3xl" 
+                src={s.difference_image_2} alt="Aeyyyy Traveller's Inn interiors" className="absolute bottom-0 left-0 z-20 h-[200px] w-3/4 rounded-2xl object-cover shadow-2xl md:h-[350px] md:w-2/3 md:rounded-3xl" 
               />
             </div>
           </div>
         </div>
       </section>
 
-      {/* 5. Our Partners */}
+      {partners.length > 0 && (
       <section className="bg-[#0a1628] py-16 text-white md:py-20">
         <div className="container mx-auto px-6 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">Our Partners</h2>
-          <p className="mb-10 text-white/60 md:mb-12">Collaborating with leading brands to create exceptional experiences</p>
+          <h2 className="mb-4 text-3xl font-bold text-white md:text-4xl">{s.partners_title}</h2>
+          <p className="mb-10 text-white/60 md:mb-12">{s.partners_subtitle}</p>
           
           <div className="overflow-hidden py-4 [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
-            <div className="partner-marquee-track flex w-max items-center opacity-60 grayscale hover:[animation-play-state:paused]">
+            <div className="partner-marquee-track flex w-max items-center opacity-80 hover:[animation-play-state:paused]">
               {[0, 1].map((copy) => (
                 <div
                   key={copy}
                   aria-hidden={copy === 1}
                   className="flex shrink-0 items-center gap-16 pr-16"
                 >
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(i => (
-                    <div
-                      key={`${copy}-${i}`}
-                      className="cursor-pointer whitespace-nowrap text-xl font-black uppercase tracking-widest transition-all hover:opacity-100 hover:grayscale-0"
-                    >
-                      BRAND{i}
-                    </div>
-                  ))}
+                  {partners.map((brand) => {
+                    const inner = brand.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={brand.image_url}
+                        alt={brand.name}
+                        className="h-10 w-auto max-w-[9rem] object-contain grayscale transition hover:grayscale-0 md:h-12"
+                      />
+                    ) : (
+                      <span className="whitespace-nowrap text-xl font-black uppercase tracking-widest">
+                        {brand.name}
+                      </span>
+                    );
+                    return brand.url ? (
+                      <a
+                        key={`${copy}-${brand.id}`}
+                        href={brand.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center opacity-70 transition hover:opacity-100"
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <div key={`${copy}-${brand.id}`} className="flex items-center opacity-70">
+                        {inner}
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
             </div>
           </div>
         </div>
       </section>
+      )}
 
-      {/* 6. Events (admin-managed layouts) */}
       {events.length > 0 && (
         <section
           id="events"
@@ -447,17 +466,9 @@ export default function Home() {
             aria-hidden="true"
             className="pointer-events-none absolute bottom-[-12rem] left-1/3 h-96 w-96 rounded-full bg-emerald-100/55 blur-3xl"
           />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-[12%] top-20 h-20 w-20 rotate-12 rounded-[2rem] border border-accent/10"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-[10%] top-24 h-14 w-14 rounded-full border border-[#0a1628]/10"
-          />
 
-          <div className="container relative z-10 mx-auto px-6">
-            <div className="mb-14 text-center">
+          <div className="container relative z-10 mx-auto px-6 space-y-16">
+            <div className="text-center">
               <motion.h2
                 initial="hidden"
                 whileInView="visible"
@@ -465,42 +476,25 @@ export default function Home() {
                 variants={fadeInUp}
                 className="mb-4 text-4xl font-bold md:text-5xl"
               >
-                Upcoming Events
+                Events
               </motion.h2>
               <p className="mx-auto max-w-2xl text-lg text-gray-600">
-                Gatherings and moments at the inn — share them with friends.
+                Gatherings and moments at the inn — book an area or share them with friends.
               </p>
-            </div>
-
-            <div className="space-y-6">
-              {featured.map((event) => (
-                <EventTile
-                  key={event.id}
-                  event={event}
-                  className={eventLayoutHeight('featured')}
-                />
-              ))}
-
-              {wide.map((event) => (
-                <EventTile
-                  key={event.id}
-                  event={event}
-                  className={eventLayoutHeight('wide')}
-                />
-              ))}
-
-              {cards.length > 0 && (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {cards.map((event) => (
-                    <EventTile
-                      key={event.id}
-                      event={event}
-                      className={eventLayoutHeight('card')}
-                    />
-                  ))}
-                </div>
+              {events.some((event) => event.is_bookable) && (
+                <Link
+                  href="/book/event"
+                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent/90"
+                >
+                  Book an event
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               )}
             </div>
+
+            <EventGroup title="Upcoming Events" events={upcoming} />
+            <EventGroup title="Recent Events" events={recent} />
+            <EventGroup title="Past Events" events={past} />
           </div>
         </section>
       )}
@@ -591,6 +585,34 @@ export default function Home() {
       </section>
 
       <Footer />
+    </div>
+  );
+}
+
+function EventGroup({ title, events }: { title: string; events: SiteEvent[] }) {
+  if (events.length === 0) return null;
+  const featured = events.filter((e) => e.layout === 'featured');
+  const wide = events.filter((e) => e.layout === 'wide');
+  const cards = events.filter((e) => e.layout === 'card' || !e.layout);
+
+  return (
+    <div>
+      <h3 className="mb-6 text-2xl font-bold md:text-3xl">{title}</h3>
+      <div className="space-y-6">
+        {featured.map((event) => (
+          <EventTile key={event.id} event={event} className={eventLayoutHeight('featured')} />
+        ))}
+        {wide.map((event) => (
+          <EventTile key={event.id} event={event} className={eventLayoutHeight('wide')} />
+        ))}
+        {cards.length > 0 && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {cards.map((event) => (
+              <EventTile key={event.id} event={event} className={eventLayoutHeight('card')} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

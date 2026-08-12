@@ -7,8 +7,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import { prefetchAdminRoute, useBookings } from '@/lib/admin/queries';
+import { prefetchAdminRoute, useBookings, useEventBookings } from '@/lib/admin/queries';
 import { adminRoomsHref, parseRoomsHubTab, type RoomsHubTab } from '@/lib/admin/rooms-hub';
+import { adminEventsHref, parseEventsHubTab, type EventsHubTab } from '@/lib/admin/events-hub';
 import { cn } from '@/lib/utils';
 import { AdminIcon, adminIcons } from '@/components/admin/AdminIcon';
 import { AdminNotifications } from '@/components/admin/AdminNotifications';
@@ -31,12 +32,12 @@ type NavLeaf = {
 };
 
 type NavGroup = {
-  id: 'rooms';
+  id: 'rooms' | 'events';
   label: string;
   short: string;
   icon: string;
   href: string;
-  children: { tab: RoomsHubTab; label: string; href: string; icon: string }[];
+  children: { tab: string; label: string; href: string; icon: string }[];
 };
 
 const topNav: (NavLeaf | NavGroup)[] = [
@@ -71,8 +72,37 @@ const topNav: (NavLeaf | NavGroup)[] = [
     ],
   },
   { href: '/admin/content', label: 'Content', short: 'Site', icon: adminIcons.content },
+  {
+    id: 'events',
+    label: 'Events',
+    short: 'Events',
+    icon: adminIcons.events,
+    href: '/admin/event-bookings',
+    children: [
+      {
+        tab: 'bookings',
+        label: 'Bookings',
+        href: adminEventsHref('bookings'),
+        icon: adminIcons.bookings,
+      },
+      {
+        tab: 'status',
+        label: 'Status',
+        href: adminEventsHref('status'),
+        icon: adminIcons.pending,
+      },
+      {
+        tab: 'calendar',
+        label: 'Calendar',
+        href: adminEventsHref('calendar'),
+        icon: adminIcons.calendar,
+      },
+      { tab: 'areas', label: 'Areas', href: adminEventsHref('areas'), icon: adminIcons.areas },
+    ],
+  },
   { href: '/admin/accounting', label: 'Accounting', short: 'Ledger', icon: adminIcons.accounting },
   { href: '/admin/reports', label: 'Reports', short: 'Reports', icon: adminIcons.reports },
+  { href: '/admin/activity', label: 'Activity log', short: 'Log', icon: adminIcons.activity },
 ];
 
 const mobileNavHrefs = new Set(['/admin', '/admin/rooms', '/admin/content', '/admin/accounting']);
@@ -85,17 +115,32 @@ function isRoomsHubPath(pathname: string) {
   );
 }
 
-function titleFromPath(pathname: string, tab: RoomsHubTab | null) {
+function isEventsHubPath(pathname: string) {
+  return pathname.startsWith('/admin/event-bookings');
+}
+
+function titleFromPath(
+  pathname: string,
+  roomsTab: RoomsHubTab | null,
+  eventsTab: EventsHubTab | null,
+) {
   if (isRoomsHubPath(pathname)) {
-    if (tab === 'bookings') return 'Bookings';
-    if (tab === 'guests') return 'Guests';
-    if (tab === 'status') return 'Room status';
-    if (tab === 'calendar') return 'Booking calendar';
+    if (roomsTab === 'bookings') return 'Bookings';
+    if (roomsTab === 'guests') return 'Guests';
+    if (roomsTab === 'status') return 'Room status';
+    if (roomsTab === 'calendar') return 'Booking calendar';
     return 'Rooms';
+  }
+  if (isEventsHubPath(pathname)) {
+    if (eventsTab === 'status') return 'Area availability';
+    if (eventsTab === 'calendar') return 'Event calendar';
+    if (eventsTab === 'areas') return 'Event areas';
+    return 'Event bookings';
   }
   if (pathname.startsWith('/admin/content')) return 'Content';
   if (pathname.startsWith('/admin/accounting')) return 'Accounting';
   if (pathname.startsWith('/admin/reports')) return 'Reports';
+  if (pathname.startsWith('/admin/activity')) return 'Activity log';
   return 'Dashboard';
 }
 
@@ -146,22 +191,32 @@ function BrandLink({
 function SidebarMenu({
   pathname,
   roomsTab,
+  eventsTab,
   pendingBookings,
+  pendingEventBookings,
   onLogout,
   onPrefetch,
 }: {
   pathname: string;
   roomsTab: RoomsHubTab;
+  eventsTab: EventsHubTab;
   pendingBookings: number;
+  pendingEventBookings: number;
   onLogout: () => void;
   onPrefetch: (href: string) => void;
 }) {
   const onRoomsPath = isRoomsHubPath(pathname);
+  const onEventsPath = isEventsHubPath(pathname);
   const [roomsExpanded, setRoomsExpanded] = useState(onRoomsPath);
+  const [eventsExpanded, setEventsExpanded] = useState(onEventsPath);
 
   useEffect(() => {
     if (onRoomsPath) setRoomsExpanded(true);
   }, [onRoomsPath]);
+
+  useEffect(() => {
+    if (onEventsPath) setEventsExpanded(true);
+  }, [onEventsPath]);
 
   return (
     <>
@@ -172,8 +227,11 @@ function SidebarMenu({
         <ul className="space-y-1">
           {topNav.map((item) => {
             if ('children' in item) {
-              const groupActive = onRoomsPath;
-              const expanded = roomsExpanded;
+              const isRooms = item.id === 'rooms';
+              const groupActive = isRooms ? onRoomsPath : onEventsPath;
+              const expanded = isRooms ? roomsExpanded : eventsExpanded;
+              const setExpanded = isRooms ? setRoomsExpanded : setEventsExpanded;
+              const pendingCount = isRooms ? pendingBookings : pendingEventBookings;
               return (
                 <li key={item.id}>
                   <div
@@ -189,7 +247,7 @@ function SidebarMenu({
                       prefetch
                       onMouseEnter={() => onPrefetch(item.href)}
                       onFocus={() => onPrefetch(item.href)}
-                      onClick={() => setRoomsExpanded(true)}
+                      onClick={() => setExpanded(true)}
                       className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-[13.5px] font-medium"
                     >
                       <AdminIcon
@@ -201,13 +259,21 @@ function SidebarMenu({
                           groupActive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400',
                         )}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {pendingCount > 0 && (
+                        <span
+                          className="inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                          aria-label={`${pendingCount} pending ${isRooms ? 'room' : 'event'} booking${pendingCount === 1 ? '' : 's'}`}
+                        >
+                          {pendingCount > 99 ? '99+' : pendingCount}
+                        </span>
+                      )}
                     </Link>
                     <button
                       type="button"
-                      aria-label={expanded ? 'Collapse Rooms menu' : 'Expand Rooms menu'}
+                      aria-label={expanded ? `Collapse ${item.label} menu` : `Expand ${item.label} menu`}
                       aria-expanded={expanded}
-                      onClick={() => setRoomsExpanded((v) => !v)}
+                      onClick={() => setExpanded((v) => !v)}
                       className="mr-1.5 rounded-[7px] p-1.5 text-slate-400 transition-colors duration-200 hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                     >
                       <motion.span
@@ -223,7 +289,7 @@ function SidebarMenu({
                   <AnimatePresence initial={false}>
                     {expanded && (
                       <motion.ul
-                        key="rooms-submenu"
+                        key={`${item.id}-submenu`}
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
@@ -231,7 +297,9 @@ function SidebarMenu({
                         className="mt-1 space-y-0.5 overflow-hidden border-l border-slate-200 py-1 pl-3 ml-4 dark:border-slate-700"
                       >
                         {item.children.map((child, index) => {
-                          const childActive = onRoomsPath && roomsTab === child.tab;
+                          const childActive = isRooms
+                            ? onRoomsPath && roomsTab === child.tab
+                            : onEventsPath && eventsTab === child.tab;
                           return (
                             <motion.li
                               key={child.tab}
@@ -247,8 +315,8 @@ function SidebarMenu({
                               <Link
                                 href={child.href}
                                 prefetch
-                                onMouseEnter={() => onPrefetch('/admin/rooms')}
-                                onFocus={() => onPrefetch('/admin/rooms')}
+                                onMouseEnter={() => onPrefetch(item.href)}
+                                onFocus={() => onPrefetch(item.href)}
                                 className={cn(
                                   'flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12.5px] font-medium transition-colors duration-200',
                                   childActive
@@ -268,7 +336,7 @@ function SidebarMenu({
                                   )}
                                 />
                                 <span className="min-w-0 flex-1 truncate">{child.label}</span>
-                                {child.tab === 'bookings' && pendingBookings > 0 && (
+                                {child.tab === 'bookings' && pendingCount > 0 && (
                                   <span
                                     className={cn(
                                       'inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
@@ -276,9 +344,9 @@ function SidebarMenu({
                                         ? 'bg-amber-400 text-amber-950 dark:bg-amber-500'
                                         : 'bg-amber-500 text-white',
                                     )}
-                                    aria-label={`${pendingBookings} pending booking${pendingBookings === 1 ? '' : 's'}`}
+                                    aria-label={`${pendingCount} pending booking${pendingCount === 1 ? '' : 's'}`}
                                   >
-                                    {pendingBookings > 99 ? '99+' : pendingBookings}
+                                    {pendingCount > 99 ? '99+' : pendingCount}
                                   </span>
                                 )}
                               </Link>
@@ -313,7 +381,7 @@ function SidebarMenu({
                     height={20}
                     className={cn(active ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400')}
                   />
-                  {item.label}
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 </Link>
               </li>
             );
@@ -432,9 +500,14 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   const [userEmail, setUserEmail] = useState('');
   const [search, setSearch] = useState('');
   const { data: bookings = [] } = useBookings();
+  const { data: eventBookings = [] } = useEventBookings();
   const pendingBookings = useMemo(
     () => bookings.filter((booking) => booking.status === 'pending').length,
     [bookings],
+  );
+  const pendingEventBookings = useMemo(
+    () => eventBookings.filter((booking) => booking.status === 'pending').length,
+    [eventBookings],
   );
 
   const roomsTab = useMemo(() => {
@@ -444,7 +517,15 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
     return parseRoomsHubTab(searchParams.get('tab'));
   }, [pathname, searchParams]);
 
-  const title = useMemo(() => titleFromPath(pathname, roomsTab), [pathname, roomsTab]);
+  const eventsTab = useMemo(() => {
+    if (!isEventsHubPath(pathname)) return 'bookings' as EventsHubTab;
+    return parseEventsHubTab(searchParams.get('tab'));
+  }, [pathname, searchParams]);
+
+  const title = useMemo(
+    () => titleFromPath(pathname, roomsTab, eventsTab),
+    [pathname, roomsTab, eventsTab],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -558,7 +639,9 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
         <SidebarMenu
           pathname={pathname}
           roomsTab={roomsTab}
+          eventsTab={eventsTab}
           pendingBookings={pendingBookings}
+          pendingEventBookings={pendingEventBookings}
           onLogout={handleLogout}
           onPrefetch={onPrefetch}
         />

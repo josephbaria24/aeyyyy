@@ -15,6 +15,8 @@ import {
 import { AdminIcon, adminIcons } from '@/components/admin/AdminIcon';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { logActivity } from '@/lib/admin/activity-log';
+import { ConfirmDeleteDialog } from '@/components/admin/ConfirmDeleteDialog';
 
 const emptyForm = {
   name: '',
@@ -80,6 +82,7 @@ export function RoomsTab() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [customAmenity, setCustomAmenity] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<Room | null>(null);
 
   const presetLabels = new Set<string>(ROOM_AMENITIES.map((a) => a.label));
   const customSelected = form.amenities.filter((a) => !presetLabels.has(a));
@@ -183,13 +186,29 @@ export function RoomsTab() {
           .update(payload)
           .eq('id', editingId);
         if (updateError) throw updateError;
+        await logActivity({
+          action: 'updated',
+          entity: 'room',
+          entityId: editingId,
+          summary: `Updated room “${payload.name}”`,
+        });
       } else {
-        const { error: insertError } = await supabase.from('rooms').insert(payload);
+        const { data, error: insertError } = await supabase
+          .from('rooms')
+          .insert(payload)
+          .select('id')
+          .single();
         if (insertError) throw insertError;
+        await logActivity({
+          action: 'created',
+          entity: 'room',
+          entityId: data?.id,
+          summary: `Added room “${payload.name}”`,
+        });
       }
 
       resetForm();
-      await invalidate(['rooms']);
+      await invalidate(['rooms', 'activity']);
       toast.success(editingId ? 'Room updated' : 'Room added');
     } catch (err) {
       const raw =
@@ -240,7 +259,13 @@ export function RoomsTab() {
         .update({ is_active: next })
         .eq('id', room.id);
       if (updateError) throw updateError;
-      await invalidate(['rooms']);
+      await logActivity({
+        action: next ? 'published' : 'hidden',
+        entity: 'room',
+        entityId: room.id,
+        summary: `${next ? 'Published' : 'Hid'} room “${room.name}”`,
+      });
+      await invalidate(['rooms', 'activity']);
       toast.success(next ? 'Room published' : 'Room hidden', {
         description: room.name,
       });
@@ -252,14 +277,19 @@ export function RoomsTab() {
   };
 
   const deleteRoom = async (id: string) => {
-    if (!window.confirm('Delete this room? This cannot be undone.')) return;
     setError('');
     try {
       const supabase = createClient();
       const { error: deleteError } = await supabase.from('rooms').delete().eq('id', id);
       if (deleteError) throw deleteError;
+      await logActivity({
+        action: 'deleted',
+        entity: 'room',
+        entityId: id,
+        summary: 'Deleted a room',
+      });
       if (editingId === id) resetForm();
-      await invalidate(['rooms']);
+      await invalidate(['rooms', 'activity']);
       toast.success('Room deleted');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not delete room';
@@ -366,7 +396,7 @@ export function RoomsTab() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void deleteRoom(room.id)}
+                        onClick={() => setPendingDelete(room)}
                         className="rounded-[5px] bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40"
                       >
                         Del
@@ -676,6 +706,21 @@ export function RoomsTab() {
           </button>
         </form>
       </div>
+
+      <ConfirmDeleteDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete this room?"
+        description={
+          pendingDelete
+            ? `“${pendingDelete.name}” will be permanently deleted. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete room"
+        onConfirm={async () => {
+          if (pendingDelete) await deleteRoom(pendingDelete.id);
+        }}
+      />
     </>
   );
 }

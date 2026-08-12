@@ -94,7 +94,7 @@ export function BookingStatusChecker({
             required
             value={bookingCode}
             onChange={(e) => setBookingCode(e.target.value.toUpperCase())}
-            placeholder="e.g. BK4821"
+            placeholder="e.g. BK4821 or EV4821"
             className={cn(
               'w-full rounded-xl border px-4 py-3 uppercase focus:outline-none',
               dark
@@ -149,7 +149,9 @@ export function BookingStatusChecker({
 
           <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>Room</dt>
+              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>
+                {booking.kind === 'event' ? 'Event' : 'Room'}
+              </dt>
               <dd className={cn('font-medium', dark ? 'text-white' : 'text-[#0a1628]')}>
                 {booking.destination}
               </dd>
@@ -166,24 +168,33 @@ export function BookingStatusChecker({
               </dd>
             </div>
             <div>
-              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>Guests</dt>
+              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>
+                {booking.kind === 'event' ? 'Spots' : 'Guests'}
+              </dt>
               <dd className={cn('font-medium', dark ? 'text-white' : 'text-[#0a1628]')}>
-                {booking.adults} adult{booking.adults === 1 ? '' : 's'}
-                {(booking.children ?? 0) > 0
-                  ? ` · ${booking.children} child${booking.children === 1 ? '' : 'ren'}`
-                  : ''}
+                {booking.kind === 'event'
+                  ? `${booking.adults} guest${booking.adults === 1 ? '' : 's'}`
+                  : `${booking.adults} adult${booking.adults === 1 ? '' : 's'}${
+                      (booking.children ?? 0) > 0
+                        ? ` · ${booking.children} child${booking.children === 1 ? '' : 'ren'}`
+                        : ''
+                    }`}
               </dd>
             </div>
             <div>
-              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>Check-in</dt>
+              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>
+                {booking.kind === 'event' ? 'From' : 'Check-in'}
+              </dt>
               <dd className={cn('font-medium', dark ? 'text-white' : 'text-[#0a1628]')}>
                 {formatDate(booking.check_in)}
               </dd>
             </div>
             <div>
-              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>Check-out</dt>
+              <dt className={cn(dark ? 'text-white/45' : 'text-[#0a1628]/45')}>
+                {booking.kind === 'event' ? 'Until' : 'Check-out'}
+              </dt>
               <dd className={cn('font-medium', dark ? 'text-white' : 'text-[#0a1628]')}>
-                {formatDate(booking.check_out)}
+                {formatDate(booking.check_out || booking.check_in)}
               </dd>
             </div>
           </dl>
