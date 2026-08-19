@@ -121,8 +121,11 @@ export function PartnersTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={(e) => void save(e)} className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+    <div className="space-y-4 sm:space-y-6">
+      <form
+        onSubmit={(e) => void save(e)}
+        className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900"
+      >
         <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">
           {editingId ? 'Edit brand' : 'Add brand'}
         </h2>
@@ -240,6 +243,8 @@ export function PartnersTab() {
         open={pendingDelete != null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title="Delete this brand?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDelete
             ? `“${pendingDelete.name}” will be removed from the partners section.`

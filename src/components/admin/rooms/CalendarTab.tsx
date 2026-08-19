@@ -179,7 +179,7 @@ export function CalendarTab() {
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-[1fr_280px]">
         <div className="overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900">
           <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
             {WEEKDAYS.map((d) => (
@@ -206,7 +206,7 @@ export function CalendarTab() {
                   type="button"
                   onClick={() => setSelectedDay(iso)}
                   className={cn(
-                    'min-h-[7.5rem] border-b border-r border-slate-100 p-1.5 text-left align-top transition-colors dark:border-slate-800',
+                    'min-h-[6.25rem] sm:min-h-[7.5rem] border-b border-r border-slate-100 p-1.5 text-left align-top transition-colors dark:border-slate-800',
                     !inMonth && 'bg-slate-50/80 dark:bg-slate-950/40',
                     selected &&
                       'bg-slate-50 ring-2 ring-inset ring-slate-900/20 dark:bg-slate-800/60 dark:ring-white/20',
@@ -265,7 +265,7 @@ export function CalendarTab() {
             {selectedBookings.length === 1 ? '' : 's'} overlapping this day
           </p>
 
-          <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto">
+          <ul className="mt-3 max-h-none space-y-2 overflow-y-auto sm:max-h-[28rem]">
             {selectedBookings.length === 0 && (
               <li className="rounded-[9px] bg-slate-50 px-3 py-6 text-center text-xs text-slate-400 dark:bg-slate-800/50">
                 No stays on this date

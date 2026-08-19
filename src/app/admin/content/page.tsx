@@ -1,7 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Crop, ExternalLink, Loader2, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
+import {
+  CalendarDays,
+  Crop,
+  ExternalLink,
+  FileText,
+  Home,
+  Image as ImageIcon,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  Share2,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   useEvents,
@@ -329,38 +343,92 @@ export default function AdminContentPage() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
           {(
             [
-              ['homepage', 'Homepage'],
-              ['gallery', 'Gallery'],
-              ['partners', 'Partners'],
-              ['events', 'Events'],
-              ['footer', 'Footer'],
-              ['rules', 'Rules'],
+              {
+                id: 'homepage',
+                label: 'Homepage',
+                Icon: Home,
+                iconBg: 'bg-indigo-50 dark:bg-indigo-950/40',
+                iconColor: 'text-indigo-700 dark:text-indigo-300',
+                btnActiveBg: 'bg-indigo-600 dark:bg-indigo-500',
+              },
+              {
+                id: 'gallery',
+                label: 'Gallery',
+                Icon: ImageIcon,
+                iconBg: 'bg-emerald-50 dark:bg-emerald-950/40',
+                iconColor: 'text-emerald-700 dark:text-emerald-300',
+                btnActiveBg: 'bg-emerald-600 dark:bg-emerald-500',
+              },
+              {
+                id: 'partners',
+                label: 'Partners',
+                Icon: Users,
+                iconBg: 'bg-amber-50 dark:bg-amber-950/40',
+                iconColor: 'text-amber-700 dark:text-amber-300',
+                btnActiveBg: 'bg-amber-600 dark:bg-amber-500',
+              },
+              {
+                id: 'events',
+                label: 'Events',
+                Icon: CalendarDays,
+                iconBg: 'bg-violet-50 dark:bg-violet-950/40',
+                iconColor: 'text-violet-700 dark:text-violet-300',
+                btnActiveBg: 'bg-violet-600 dark:bg-violet-500',
+              },
+              {
+                id: 'footer',
+                label: 'Footer',
+                Icon: Info,
+                iconBg: 'bg-teal-50 dark:bg-teal-950/40',
+                iconColor: 'text-teal-700 dark:text-teal-300',
+                btnActiveBg: 'bg-teal-600 dark:bg-teal-500',
+              },
+              {
+                id: 'rules',
+                label: 'Rules',
+                Icon: FileText,
+                iconBg: 'bg-rose-50 dark:bg-rose-950/40',
+                iconColor: 'text-rose-700 dark:text-rose-300',
+                btnActiveBg: 'bg-rose-600 dark:bg-rose-500',
+              },
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={cn(
-                'rounded-[9px] px-4 py-2 text-sm font-semibold transition',
-                tab === id
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-white text-slate-600 admin-hairline hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300',
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          ).map((tabDef) => {
+            const active = tab === tabDef.id;
+            const Icon = tabDef.Icon;
+            return (
+              <button
+                key={tabDef.id}
+                type="button"
+                onClick={() => setTab(tabDef.id)}
+                className={cn(
+                  'whitespace-nowrap inline-flex items-center gap-2 rounded-[10px] px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:py-2 sm:text-sm',
+                  active
+                    ? `text-white ${tabDef.btnActiveBg} shadow-sm`
+                    : 'bg-white text-slate-700 admin-hairline hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full',
+                    active ? `text-white ${tabDef.btnActiveBg}` : `${tabDef.iconBg} ${tabDef.iconColor}`,
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="truncate">{tabDef.label}</span>
+              </button>
+            );
+          })}
         </div>
         <a
           href={tab === 'events' ? '/#events' : tab === 'rules' ? '/#rules' : '/'}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-[9px] admin-hairline bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          className="inline-flex items-center gap-1.5 rounded-[10px] admin-hairline bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 sm:px-3.5 sm:py-2 sm:text-sm"
         >
           <ExternalLink className="h-4 w-4" />
           Preview landing page
@@ -373,8 +441,8 @@ export default function AdminContentPage() {
       {tab === 'footer' && <FooterTab />}
 
       {tab === 'rules' && (
-        <div className="space-y-6">
-          <form onSubmit={saveRule} className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+        <div className="space-y-4 sm:space-y-6">
+          <form onSubmit={saveRule} className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
             <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">
               {editingRuleId ? 'Edit rule' : 'Add rule'}
             </h2>
@@ -415,7 +483,7 @@ export default function AdminContentPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+                  className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2 sm:py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
                 >
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
                   {editingRuleId ? 'Update rule' : 'Add rule'}
@@ -427,7 +495,7 @@ export default function AdminContentPage() {
                       setEditingRuleId(null);
                       setRuleForm(emptyRule);
                     }}
-                    className="rounded-[9px] px-4 py-2.5 text-sm text-slate-500"
+                    className="rounded-[9px] px-4 py-2 sm:py-2.5 text-sm text-slate-500"
                   >
                     Cancel
                   </button>
@@ -474,9 +542,9 @@ export default function AdminContentPage() {
       )}
 
       {tab === 'events' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <form onSubmit={saveEvent} className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+            <form onSubmit={saveEvent} className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
               <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">
                 {editingEventId ? 'Edit event' : 'Add event'}
               </h2>
@@ -517,7 +585,7 @@ export default function AdminContentPage() {
                         type="button"
                         onClick={() => setEventForm({ ...eventForm, layout: l.value })}
                         className={cn(
-                          'rounded-[9px] px-3 py-2.5 text-left transition',
+                          'rounded-[9px] px-3 py-2 sm:py-2.5 text-left transition',
                           eventForm.layout === l.value
                             ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                             : 'admin-hairline bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-950 dark:text-slate-300',
@@ -619,7 +687,7 @@ export default function AdminContentPage() {
                         type="button"
                         onClick={() => setEventForm({ ...eventForm, listing: l.value })}
                         className={cn(
-                          'rounded-[9px] px-3 py-2.5 text-left transition',
+                          'rounded-[9px] px-3 py-2 sm:py-2.5 text-left transition',
                           eventForm.listing === l.value
                             ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                             : 'admin-hairline bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-950 dark:text-slate-300',
@@ -687,7 +755,7 @@ export default function AdminContentPage() {
                 <button
                   type="submit"
                   disabled={saving || uploading}
-                  className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+                  className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2 sm:py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
                 >
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
                   {editingEventId ? 'Update event' : 'Add event'}
@@ -699,7 +767,7 @@ export default function AdminContentPage() {
                       setEditingEventId(null);
                       setEventForm(emptyEvent);
                     }}
-                    className="rounded-[9px] px-4 py-2.5 text-sm text-slate-500"
+                    className="rounded-[9px] px-4 py-2 sm:py-2.5 text-sm text-slate-500"
                   >
                     Cancel
                   </button>
@@ -790,6 +858,8 @@ export default function AdminContentPage() {
         open={pendingDeleteRule != null}
         onOpenChange={(open) => !open && setPendingDeleteRule(null)}
         title="Delete this rule?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDeleteRule
             ? `“${pendingDeleteRule.title}” will be permanently deleted.`
@@ -805,6 +875,8 @@ export default function AdminContentPage() {
         open={pendingDeleteEvent != null}
         onOpenChange={(open) => !open && setPendingDeleteEvent(null)}
         title="Delete this event?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDeleteEvent
             ? `“${pendingDeleteEvent.title}” will be permanently deleted from the homepage listings.`

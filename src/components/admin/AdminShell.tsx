@@ -428,10 +428,10 @@ function BottomNav({
 
   return (
     <nav
-      className="admin-bottom-nav fixed inset-x-0 bottom-0 z-40 lg:hidden"
+      className="admin-bottom-nav fixed inset-x-0 bottom-0 z-40 lg:hidden p-2"
       aria-label="Primary"
     >
-      <div className="admin-hairline-t mx-auto flex max-w-3xl items-stretch justify-around bg-white dark:bg-slate-900">
+      <div className="mx-auto flex max-w-3xl items-stretch justify-around rounded-[18px] bg-white shadow-lg ring-1 ring-slate-200/60 dark:bg-slate-900 dark:ring-slate-700/60">
         {items.map((item) => {
           const active =
             item.href === '/admin/rooms'
@@ -446,17 +446,17 @@ function BottomNav({
               onFocus={() => onPrefetch(item.href)}
               onTouchStart={() => onPrefetch(item.href)}
               className={cn(
-                'admin-bottom-nav-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 pt-2 text-center transition-colors',
+                'admin-bottom-nav-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1.5 py-2 text-center transition-colors rounded-xl',
                 active
-                  ? 'text-slate-900 dark:text-white'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300',
+                  ? 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
               )}
               aria-current={active ? 'page' : undefined}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute left-1/2 top-0 h-0.5 w-8 -translate-x-1/2 rounded-full bg-slate-900 dark:bg-white"
+                  className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-slate-900 dark:bg-white"
                 />
               )}
               <AdminIcon icon={item.icon} width={22} height={22} />

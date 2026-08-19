@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -20,6 +20,9 @@ type ConfirmDeleteDialogProps = {
   title?: string;
   description: string;
   confirmLabel?: string;
+  /** If true, user must type `typingValue` to enable the destructive confirm button. */
+  requireTyping?: boolean;
+  typingValue?: string;
   onConfirm: () => void | Promise<void>;
 };
 
@@ -29,9 +32,16 @@ export function ConfirmDeleteDialog({
   title = 'Delete permanently?',
   description,
   confirmLabel = 'Delete',
+  requireTyping = false,
+  typingValue = 'DELETE',
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   const [busy, setBusy] = useState(false);
+  const [typed, setTyped] = useState('');
+
+  useEffect(() => {
+    if (open) setTyped('');
+  }, [open]);
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -43,6 +53,8 @@ export function ConfirmDeleteDialog({
     }
   };
 
+  const canConfirm = !busy && (!requireTyping || typed.trim() === typingValue);
+
   return (
     <AlertDialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <AlertDialogContent className="rounded-[13px] dark:border-slate-700 dark:bg-slate-900">
@@ -52,13 +64,33 @@ export function ConfirmDeleteDialog({
             {description}
           </AlertDialogDescription>
         </AlertDialogHeader>
+
+        {requireTyping && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-300">
+              Type <span className="font-mono text-slate-900 dark:text-slate-100">{typingValue}</span> to confirm
+            </p>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              className={cn(
+                'w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm',
+                'bg-white/5 text-slate-100 dark:bg-slate-950 dark:text-slate-100',
+              )}
+              placeholder={typingValue}
+              autoFocus
+              aria-label="Type confirmation text"
+            />
+          </div>
+        )}
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy} className="rounded-[9px]">
             Cancel
           </AlertDialogCancel>
           <button
             type="button"
-            disabled={busy}
+            disabled={!canConfirm}
             onClick={() => void handleConfirm()}
             className={cn(
               buttonVariants({ variant: 'destructive' }),

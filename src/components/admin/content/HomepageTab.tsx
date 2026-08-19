@@ -60,11 +60,18 @@ export function HomepageTab() {
       await invalidate(['site', 'activity']);
       toast.success('Homepage saved');
     } catch (err) {
+      // Supabase errors aren't always instanceof Error, so extract a best-effort message.
+      const anyErr = err as any;
+      const message =
+        (anyErr?.message as string | undefined) ??
+        (typeof err === 'string' ? err : undefined) ??
+        (anyErr?.error?.message as string | undefined) ??
+        (anyErr ? JSON.stringify(anyErr) : undefined) ??
+        'Unknown error';
+
+      console.error('[HomepageTab/save] failed:', err);
       toast.error('Could not save homepage', {
-        description:
-          err instanceof Error
-            ? `${err.message} — run supabase/site-cms-schema.sql if tables are missing.`
-            : undefined,
+        description: `${message} — run supabase/site-cms-schema.sql if tables/columns/triggers are missing.`,
       });
     } finally {
       setSaving(false);
@@ -80,8 +87,8 @@ export function HomepageTab() {
   }
 
   return (
-    <form onSubmit={(e) => void save(e)} className="space-y-6">
-      <section className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+    <form onSubmit={(e) => void save(e)} className="space-y-4 sm:space-y-6">
+      <section className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
         <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Hero</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
@@ -131,7 +138,7 @@ export function HomepageTab() {
         </div>
       </section>
 
-      <section className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+      <section className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
         <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-slate-100">Hotel &amp; poolside copy</h2>
         <p className="mb-4 text-xs text-slate-500">Photos for this carousel are under the Gallery tab.</p>
         <div className="grid gap-3">
@@ -157,7 +164,7 @@ export function HomepageTab() {
         </div>
       </section>
 
-      <section className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+      <section className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
         <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">The difference</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <input
@@ -220,7 +227,7 @@ export function HomepageTab() {
         </div>
       </section>
 
-      <section className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+      <section className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900">
         <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Partners heading</h2>
         <p className="mb-3 text-xs text-slate-500">Add brand logos under the Partners tab.</p>
         <div className="grid gap-3">

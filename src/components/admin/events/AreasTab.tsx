@@ -379,6 +379,8 @@ export function AreasTab() {
         open={pendingDelete != null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title="Delete this area?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDelete
             ? `“${pendingDelete.title}” will be removed. Guests will no longer see or book this area.`

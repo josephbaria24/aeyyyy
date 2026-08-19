@@ -12,15 +12,29 @@ import { BookingReferenceCard } from '@/components/BookingReferenceCard';
 import { RoomGallery } from '@/components/RoomGallery';
 import { EventAreaCalendar } from '@/components/EventAreaCalendar';
 import { createClient } from '@/lib/supabase/client';
-import { useActiveEvents, useActiveOfferings, useEventOccupancyStays } from '@/lib/admin/queries';
+import { useActiveEvents, useActiveOfferings, useActiveRooms, useEventOccupancyStays, useOccupancyStays } from '@/lib/admin/queries';
 import { makeEventBookingCode, roomBookingHrefFromEvent } from '@/lib/types/event-booking';
 import { eventAreaImages, type EventOffering } from '@/lib/types/event-offering';
 import { formatMoney, SYSTEM_CURRENCY } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getStayAvailability, todayIsoLocal, type StayAvailability } from '@/lib/room-status';
 
 const inputClass =
   'rounded-xl border border-white/15 bg-white/10 px-3 py-2.5 text-sm placeholder:text-white/35';
+
+function toIsoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysIso(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return toIsoDate(d);
+}
 
 export default function EventBooking() {
   const searchParams = useSearchParams();
@@ -29,6 +43,8 @@ export default function EventBooking() {
   const { data: offerings = [], isPending: offeringsPending } = useActiveOfferings();
   const { data: events = [], isPending: eventsPending } = useActiveEvents();
   const { data: occupancy = { stays: [], unavailable: [] } } = useEventOccupancyStays();
+  const { data: activeRooms = [] } = useActiveRooms();
+  const { data: occupancyStays = [] } = useOccupancyStays();
   const isPending = offeringsPending || eventsPending;
 
   const datedEvents = useMemo(
@@ -81,6 +97,24 @@ export default function EventBooking() {
   const areaUnavailable =
     selected?.availability === 'unavailable' ||
     (selected != null && occupancy.unavailable.includes(selected.id));
+
+  const roomsAvailabilityForEventDates = useMemo(() => {
+    if (!form.startDate || !form.endDate) return null;
+    if (!activeRooms.length) return null;
+    if (!occupancyStays) return null;
+
+    // Guest event dates are inclusive; room check-out is exclusive (end + 1 day).
+    const checkIn = form.startDate;
+    const checkOut = addDaysIso(form.endDate, 1);
+
+    let available = 0;
+    for (const room of activeRooms) {
+      const availability: StayAvailability = getStayAvailability(room, occupancyStays, checkIn, checkOut);
+      if (availability.kind === 'open') available += 1;
+    }
+
+    return { available, total: activeRooms.length };
+  }, [activeRooms, occupancyStays, form.startDate, form.endDate]);
 
   const areaStays = useMemo(() => {
     if (!selected) return [];
@@ -356,6 +390,23 @@ export default function EventBooking() {
                         setForm((prev) => ({ ...prev, startDate: from, endDate: until }))
                       }
                     />
+
+                  {roomsAvailabilityForEventDates && (
+                    <p
+                      className={cn(
+                        'mt-3 text-xs',
+                        roomsAvailabilityForEventDates.available > 0
+                          ? 'text-white/60'
+                          : 'text-rose-300',
+                      )}
+                    >
+                      Rooms available for your dates:{' '}
+                      <span className="font-semibold text-white">
+                        {roomsAvailabilityForEventDates.available}
+                      </span>{' '}
+                      / {roomsAvailabilityForEventDates.total}
+                    </p>
+                  )}
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">

@@ -722,6 +722,8 @@ export default function AdminAccountingPage() {
         open={pendingDeleteIncome != null}
         onOpenChange={(open) => !open && setPendingDeleteIncome(null)}
         title="Delete this income?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDeleteIncome
             ? `“${pendingDeleteIncome.title}” (${formatMoney(Number(pendingDeleteIncome.amount))}) will be permanently deleted.`
@@ -737,6 +739,8 @@ export default function AdminAccountingPage() {
         open={pendingDeleteExpense != null}
         onOpenChange={(open) => !open && setPendingDeleteExpense(null)}
         title="Delete this expense?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDeleteExpense
             ? `“${pendingDeleteExpense.title}” (${formatMoney(Number(pendingDeleteExpense.amount))}) will be permanently deleted.`

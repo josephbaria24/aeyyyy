@@ -711,6 +711,8 @@ export function RoomsTab() {
         open={pendingDelete != null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title="Delete this room?"
+        requireTyping
+        typingValue="DELETE"
         description={
           pendingDelete
             ? `“${pendingDelete.name}” will be permanently deleted. This cannot be undone.`

@@ -9,19 +9,21 @@ import {
   CarouselSection,
   type CarouselCardItem,
 } from '@/components/kokonutui/carousel-cards';
-import { useActiveRooms } from '@/lib/admin/queries';
+import { useActiveRooms, useOccupancyStays } from '@/lib/admin/queries';
 import { SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
 import { roomImages, type Room } from '@/lib/types/room';
 import { images } from '@/lib/images';
+import { getRoomStatusFromOccupancy, todayIsoLocal, type RoomLiveStatus } from '@/lib/room-status';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 32 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } },
 };
 
-function roomToCarouselItem(room: Room): CarouselCardItem {
+function roomToCarouselItem(room: Room, status: RoomLiveStatus): CarouselCardItem {
   const photos = roomImages(room);
-  const unavailable = room.availability === 'unavailable';
+  const unavailable = room.availability === 'unavailable' || status === 'unavailable';
+  const availableToday = status === 'available';
   return {
     id: room.id,
     title: room.name,
@@ -31,7 +33,11 @@ function roomToCarouselItem(room: Room): CarouselCardItem {
     currency: SYSTEM_CURRENCY_SYMBOL,
     priceUnit: 'night',
     badge: room.category || 'Standard',
-    statusBadge: unavailable ? 'Temporarily unavailable' : undefined,
+    statusBadge: unavailable
+      ? 'Temporarily unavailable'
+      : availableToday
+        ? 'Available today'
+        : 'Not available today',
     date: room.description?.trim() || undefined,
     href: `/book?room=${encodeURIComponent(room.name)}`,
     disabled: unavailable,
@@ -40,7 +46,17 @@ function roomToCarouselItem(room: Room): CarouselCardItem {
 
 export default function Rooms() {
   const { data: rooms = [], isPending, error } = useActiveRooms();
+  const { data: occupancyStays = [] } = useOccupancyStays();
   const [category, setCategory] = useState('All');
+  const today = todayIsoLocal();
+
+  const statusByRoomId = useMemo(() => {
+    const map = new Map<string, RoomLiveStatus>();
+    for (const room of rooms) {
+      map.set(room.id, getRoomStatusFromOccupancy(room, occupancyStays, today));
+    }
+    return map;
+  }, [rooms, occupancyStays, today]);
 
   const categories = useMemo(() => {
     const set = new Set(rooms.map((r) => r.category || 'Standard'));
@@ -57,7 +73,7 @@ export default function Rooms() {
       return [
         {
           title: `${category} rooms`,
-          items: filtered.map(roomToCarouselItem),
+          items: filtered.map((room) => roomToCarouselItem(room, statusByRoomId.get(room.id) ?? 'available')),
           viewAllHref: '/book',
         },
       ];
@@ -75,10 +91,10 @@ export default function Rooms() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([cat, list]) => ({
         title: `${cat} rooms`,
-        items: list.map(roomToCarouselItem),
+        items: list.map((room) => roomToCarouselItem(room, statusByRoomId.get(room.id) ?? 'available')),
         viewAllHref: '/book',
       }));
-  }, [category, filtered, rooms]);
+  }, [category, filtered, rooms, statusByRoomId]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white">

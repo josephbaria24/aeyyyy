@@ -89,7 +89,10 @@ export function FooterTab() {
   }
 
   return (
-    <form onSubmit={(e) => void save(e)} className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
+    <form
+      onSubmit={(e) => void save(e)}
+      className="rounded-[13px] admin-hairline bg-white p-4 sm:p-6 dark:bg-slate-900"
+    >
       <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Footer details</h2>
       <div className="grid gap-3 md:grid-cols-2">
         <textarea
