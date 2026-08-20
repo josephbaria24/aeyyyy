@@ -428,10 +428,10 @@ function BottomNav({
 
   return (
     <nav
-      className="admin-bottom-nav fixed inset-x-0 bottom-0 z-40 lg:hidden p-2"
+      className="admin-bottom-nav fixed inset-x-0 bottom-0 z-40 lg:hidden px-2 pt-2"
       aria-label="Primary"
     >
-      <div className="mx-auto flex max-w-3xl items-stretch justify-around rounded-[18px] bg-white shadow-lg ring-1 ring-slate-200/60 dark:bg-slate-900 dark:ring-slate-700/60">
+      <div className="mx-auto flex max-w-3xl items-stretch justify-around rounded-[18px] bg-slate-900 shadow-xl shadow-slate-900/30 ring-1 ring-slate-700/60 dark:bg-white dark:shadow-lg dark:shadow-black/10 dark:ring-slate-200/80">
         {items.map((item) => {
           const active =
             item.href === '/admin/rooms'
@@ -448,18 +448,18 @@ function BottomNav({
               className={cn(
                 'admin-bottom-nav-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1.5 py-2 text-center transition-colors rounded-xl',
                 active
-                  ? 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
+                  ? 'bg-white/10 text-white dark:bg-slate-900/10 dark:text-slate-900'
+                  : 'text-slate-300 hover:bg-white/5 hover:text-white dark:text-slate-500 dark:hover:bg-slate-900/5 dark:hover:text-slate-900',
               )}
               aria-current={active ? 'page' : undefined}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-slate-900 dark:bg-white"
+                  className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-white dark:bg-slate-900"
                 />
               )}
-              <AdminIcon icon={item.icon} width={22} height={22} />
+              <AdminIcon icon={item.icon} width={22} height={22} className="text-current" />
               <span className="max-w-full truncate text-[10px] font-semibold leading-tight tracking-tight sm:text-[11px]">
                 <span className="sm:hidden">{item.short}</span>
                 <span className="hidden sm:inline">{item.label}</span>

@@ -1,4 +1,6 @@
 export const fieldClass =
-  'w-full rounded-[9px] admin-hairline px-3 py-2 text-sm sm:py-2.5 dark:bg-slate-950 dark:text-slate-100';
+  'box-border min-w-0 max-w-full w-full rounded-[9px] admin-hairline px-3 py-2 text-sm sm:py-2.5 dark:bg-slate-950 dark:text-slate-100';
+
+export const fileInputClass = 'box-border min-w-0 max-w-full text-sm';
 
 export const labelClass = 'mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400';
