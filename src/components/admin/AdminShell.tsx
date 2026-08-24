@@ -106,8 +106,6 @@ const topNav: (NavLeaf | NavGroup)[] = [
   { href: '/admin/activity', label: 'Activity log', short: 'Log', icon: adminIcons.activity },
 ];
 
-const mobileNavHrefs = new Set(['/admin', '/admin/rooms', '/admin/content', '/admin/accounting']);
-
 function isRoomsHubPath(pathname: string) {
   return (
     pathname.startsWith('/admin/rooms') ||
@@ -198,6 +196,7 @@ function SidebarMenu({
   pendingEventBookings,
   onLogout,
   onPrefetch,
+  onNavigate,
 }: {
   pathname: string;
   roomsTab: RoomsHubTab;
@@ -206,6 +205,7 @@ function SidebarMenu({
   pendingEventBookings: number;
   onLogout: () => void;
   onPrefetch: (href: string) => void;
+  onNavigate?: () => void;
 }) {
   const onRoomsPath = isRoomsHubPath(pathname);
   const onEventsPath = isEventsHubPath(pathname);
@@ -249,7 +249,10 @@ function SidebarMenu({
                       prefetch
                       onMouseEnter={() => onPrefetch(item.href)}
                       onFocus={() => onPrefetch(item.href)}
-                      onClick={() => setExpanded(true)}
+                      onClick={() => {
+                        setExpanded(true);
+                        onNavigate?.();
+                      }}
                       className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-[13.5px] font-medium"
                     >
                       <AdminIcon
@@ -319,6 +322,7 @@ function SidebarMenu({
                                 prefetch
                                 onMouseEnter={() => onPrefetch(item.href)}
                                 onFocus={() => onPrefetch(item.href)}
+                                onClick={() => onNavigate?.()}
                                 className={cn(
                                   'flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12.5px] font-medium transition-colors duration-200',
                                   childActive
@@ -370,6 +374,7 @@ function SidebarMenu({
                   prefetch
                   onMouseEnter={() => onPrefetch(item.href)}
                   onFocus={() => onPrefetch(item.href)}
+                  onClick={() => onNavigate?.()}
                   className={cn(
                     'flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-[13.5px] font-medium transition-colors',
                     active
@@ -405,75 +410,6 @@ function SidebarMenu({
   );
 }
 
-function BottomNav({
-  pathname,
-  onPrefetch,
-}: {
-  pathname: string;
-  onPrefetch: (href: string) => void;
-}) {
-  const items: NavLeaf[] = topNav.flatMap((item) => {
-    if ('children' in item) {
-      if (!mobileNavHrefs.has(item.href)) return [];
-      return [
-        {
-          href: item.href,
-          label: item.label,
-          short: item.short,
-          icon: item.icon,
-        },
-      ];
-    }
-    if (!mobileNavHrefs.has(item.href)) return [];
-    return [item];
-  });
-
-  return (
-    <nav
-      className="admin-bottom-nav fixed inset-x-0 bottom-0 z-40 lg:hidden px-2 pt-2"
-      aria-label="Primary"
-    >
-      <div className="mx-auto flex max-w-3xl items-stretch justify-around rounded-[18px] bg-slate-900 shadow-xl shadow-slate-900/30 ring-1 ring-slate-700/60 dark:bg-white dark:shadow-lg dark:shadow-black/10 dark:ring-slate-200/80">
-        {items.map((item) => {
-          const active =
-            item.href === '/admin/rooms'
-              ? isRoomsHubPath(pathname)
-              : isLeafActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              prefetch
-              onMouseEnter={() => onPrefetch(item.href)}
-              onFocus={() => onPrefetch(item.href)}
-              onTouchStart={() => onPrefetch(item.href)}
-              className={cn(
-                'admin-bottom-nav-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1.5 py-2 text-center transition-colors rounded-xl',
-                active
-                  ? 'bg-white/10 text-white dark:bg-slate-900/10 dark:text-slate-900'
-                  : 'text-slate-300 hover:bg-white/5 hover:text-white dark:text-slate-500 dark:hover:bg-slate-900/5 dark:hover:text-slate-900',
-              )}
-              aria-current={active ? 'page' : undefined}
-            >
-              {active && (
-                <span
-                  aria-hidden
-                  className="absolute left-1/2 top-1 h-2 w-2 -translate-x-1/2 rounded-full bg-white dark:bg-slate-900"
-                />
-              )}
-              <AdminIcon icon={item.icon} width={22} height={22} className="text-current" />
-              <span className="max-w-full truncate text-[10px] font-semibold leading-tight tracking-tight sm:text-[11px]">
-                <span className="sm:hidden">{item.short}</span>
-                <span className="hidden sm:inline">{item.label}</span>
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -501,6 +437,7 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [userEmail, setUserEmail] = useState('');
   const [search, setSearch] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const { data: bookings = [] } = useBookings();
   const { data: eventBookings = [] } = useEventBookings();
   const pendingBookings = useMemo(
@@ -528,6 +465,23 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
     () => titleFromPath(pathname, roomsTab, eventsTab),
     [pathname, roomsTab, eventsTab],
   );
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname, searchParams]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -562,13 +516,22 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-[#F5F7FB] dark:bg-slate-950 supports-[height:100dvh]:h-[100dvh]">
       <AdminDataSync />
-      <header className="fixed inset-x-0 top-0 z-40 admin-hairline-b bg-white dark:bg-slate-900 [padding-top:env(safe-area-inset-top,0px)]">
+      <header className="fixed inset-x-0 top-0 z-50 admin-hairline-b bg-white dark:bg-slate-900 [padding-top:env(safe-area-inset-top,0px)]">
         <div className="flex h-14 sm:h-16">
           <div className="hidden h-full w-[260px] shrink-0 items-center px-6 lg:flex">
             <BrandLink onPrefetch={onPrefetch} />
           </div>
 
           <div className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 sm:gap-3 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 lg:hidden"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <AdminIcon icon={menuOpen ? adminIcons.close : adminIcons.menu} width={22} height={22} />
+            </button>
             <div className="min-w-0 lg:hidden">
               <BrandLink compact onPrefetch={onPrefetch} />
             </div>
@@ -649,10 +612,45 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
         />
       </aside>
 
-      <BottomNav pathname={pathname} onPrefetch={onPrefetch} />
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Close menu"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
+              onClick={() => setMenuOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+              className="fixed bottom-0 left-0 top-[calc(3.5rem+env(safe-area-inset-top,0px))] z-40 flex w-[min(280px,86vw)] flex-col bg-white shadow-2xl dark:bg-slate-900 sm:top-[calc(4rem+env(safe-area-inset-top,0px))] lg:hidden"
+            >
+              <SidebarMenu
+                pathname={pathname}
+                roomsTab={roomsTab}
+                eventsTab={eventsTab}
+                pendingBookings={pendingBookings}
+                pendingEventBookings={pendingEventBookings}
+                onLogout={() => {
+                  setMenuOpen(false);
+                  void handleLogout();
+                }}
+                onPrefetch={onPrefetch}
+                onNavigate={() => setMenuOpen(false)}
+              />
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
       <div className="flex h-full flex-col pt-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:pt-[calc(4rem+env(safe-area-inset-top,0px))] lg:pl-[260px]">
-        <main className="admin-main-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:p-6 lg:p-8 lg:pb-8 [-webkit-overflow-scrolling:touch]">
+        <main className="admin-main-scroll flex-1 overflow-y-auto overflow-x-hidden p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:p-6 lg:p-8 lg:pb-8 [-webkit-overflow-scrolling:touch]">
           <div className="mb-5 sm:mb-6">
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">
               {title}

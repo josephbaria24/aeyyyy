@@ -114,7 +114,8 @@ export function AdminNotifications() {
       <DropdownMenuContent
         align="end"
         sideOffset={8}
-        className="w-[min(22rem,calc(100vw-1.5rem))] rounded-[13px] border-slate-200 p-0 dark:border-slate-700 dark:bg-slate-900"
+        collisionPadding={12}
+        className="z-[60] w-[min(22rem,calc(100vw-1.5rem))] rounded-[13px] border-slate-200 p-0 dark:border-slate-700 dark:bg-slate-900"
       >
         <div className="flex items-center justify-between px-4 py-3">
           <DropdownMenuLabel className="p-0 text-sm font-bold text-slate-900 dark:text-slate-100">
