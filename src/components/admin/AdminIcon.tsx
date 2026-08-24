@@ -51,4 +51,5 @@ export const adminIcons = {
   events: 'solar:calendar-mark-bold-duotone',
   areas: 'solar:layers-bold-duotone',
   activity: 'solar:history-bold-duotone',
+  staff: 'solar:user-id-bold-duotone',
 } as const;

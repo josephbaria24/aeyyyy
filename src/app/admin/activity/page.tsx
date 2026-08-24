@@ -34,6 +34,7 @@ const ENTITY_FILTERS = [
   'offering',
   'income',
   'expense',
+  'user',
 ] as const;
 
 export default function AdminActivityPage() {

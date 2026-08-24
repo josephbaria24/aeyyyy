@@ -17,7 +17,8 @@ export type ActivityEntity =
   | 'site'
   | 'gallery'
   | 'partner'
-  | 'offering';
+  | 'offering'
+  | 'user';
 
 export type ActivityLog = {
   id: string;
@@ -52,4 +53,5 @@ export const ACTIVITY_ENTITY_LABEL: Record<string, string> = {
   gallery: 'Gallery',
   partner: 'Partner',
   offering: 'Event type',
+  user: 'User',
 };

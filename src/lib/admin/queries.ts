@@ -13,6 +13,7 @@ import { normalizeEventBooking } from '@/lib/types/event-booking';
 import type { EventOffering } from '@/lib/types/event-offering';
 import { mapEventOffering } from '@/lib/types/event-offering';
 import type { ActivityLog } from '@/lib/types/activity-log';
+import type { AdminUser } from '@/lib/types/admin-user';
 import {
   DEFAULT_GALLERY,
   DEFAULT_SITE_SETTINGS,
@@ -36,6 +37,7 @@ export const adminKeys = {
   site: ['admin', 'site'] as const,
   gallery: ['admin', 'gallery'] as const,
   partners: ['admin', 'partners'] as const,
+  users: ['admin', 'users'] as const,
   booking: (id: string) => ['admin', 'booking', id] as const,
 };
 
@@ -250,6 +252,22 @@ export async function fetchActivityLogs() {
     .limit(400);
   if (error) throw error;
   return (data as ActivityLog[]) ?? [];
+}
+
+export async function fetchAdminUsers() {
+  const res = await fetch('/api/admin/users', { cache: 'no-store' });
+  const payload = (await res.json()) as {
+    users?: AdminUser[];
+    currentUserId?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(payload.error || 'Could not load users');
+  }
+  return {
+    users: payload.users ?? [],
+    currentUserId: payload.currentUserId ?? '',
+  };
 }
 
 export async function fetchBooking(id: string) {
@@ -492,6 +510,14 @@ export function useActivityLogs() {
   });
 }
 
+export function useAdminUsers() {
+  return useQuery({
+    queryKey: adminKeys.users,
+    queryFn: fetchAdminUsers,
+    ...adminCacheOptions,
+  });
+}
+
 export function useBooking(id: string) {
   return useQuery({
     queryKey: adminKeys.booking(id),
@@ -513,7 +539,8 @@ export type AdminInvalidateKey =
   | 'activity'
   | 'site'
   | 'gallery'
-  | 'partners';
+  | 'partners'
+  | 'users';
 
 export function invalidateAdminData(
   queryClient: QueryClient,
@@ -530,6 +557,7 @@ export function invalidateAdminData(
     'site',
     'gallery',
     'partners',
+    'users',
   ],
 ) {
   return Promise.all(keys.map((key) => queryClient.invalidateQueries({ queryKey: adminKeys[key] })));
@@ -640,6 +668,14 @@ export function prefetchAdminRoute(queryClient: QueryClient, href: string) {
     void queryClient.prefetchQuery({
       queryKey: adminKeys.activity,
       queryFn: fetchActivityLogs,
+      ...adminCacheOptions,
+    });
+    return;
+  }
+  if (href === '/admin/users') {
+    void queryClient.prefetchQuery({
+      queryKey: adminKeys.users,
+      queryFn: fetchAdminUsers,
       ...adminCacheOptions,
     });
   }

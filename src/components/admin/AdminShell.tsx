@@ -101,6 +101,7 @@ const topNav: (NavLeaf | NavGroup)[] = [
     ],
   },
   { href: '/admin/accounting', label: 'Accounting', short: 'Ledger', icon: adminIcons.accounting },
+  { href: '/admin/users', label: 'Users', short: 'Users', icon: adminIcons.staff },
   { href: '/admin/reports', label: 'Reports', short: 'Reports', icon: adminIcons.reports },
   { href: '/admin/activity', label: 'Activity log', short: 'Log', icon: adminIcons.activity },
 ];
@@ -139,6 +140,7 @@ function titleFromPath(
   }
   if (pathname.startsWith('/admin/content')) return 'Content';
   if (pathname.startsWith('/admin/accounting')) return 'Accounting';
+  if (pathname.startsWith('/admin/users')) return 'Users';
   if (pathname.startsWith('/admin/reports')) return 'Reports';
   if (pathname.startsWith('/admin/activity')) return 'Activity log';
   return 'Dashboard';
