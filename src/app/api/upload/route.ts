@@ -3,6 +3,9 @@ import { cloudinary, type CloudinaryUploadResult } from '@/lib/cloudinary';
 
 export const runtime = 'nodejs';
 
+/** Keep under common host body limits (Vercel ~4.5MB). */
+const MAX_UPLOAD_BYTES = 4.5 * 1024 * 1024;
+
 function cloudinaryErrorMessage(error: unknown) {
   if (!error) return 'Upload failed';
   if (error instanceof Error && error.message) return error.message;
@@ -58,8 +61,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
     }
 
+    if (typeof file.size === 'number' && file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            'Image is too large for upload. Use a photo under 4 MB, or a compressed JPEG.',
+        },
+        { status: 413 },
+      );
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    if (buffer.byteLength > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            'Image is too large for upload. Use a photo under 4 MB, or a compressed JPEG.',
+        },
+        { status: 413 },
+      );
+    }
 
     const result = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
       cloudinary.uploader
