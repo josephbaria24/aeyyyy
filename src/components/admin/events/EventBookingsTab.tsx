@@ -144,7 +144,7 @@ export function EventBookingsTab({
             category: 'booking',
             amount: incomeAmount,
             currency: booking.currency || SYSTEM_CURRENCY,
-            income_date: new Date().toISOString().slice(0, 10),
+            income_date: booking.event_date || new Date().toISOString().slice(0, 10),
             notes: `${booking.event_title} · ${booking.guests} guest${booking.guests === 1 ? '' : 's'}`,
           });
         }
@@ -206,7 +206,7 @@ export function EventBookingsTab({
         category: 'booking',
         amount: paymentAmount,
         currency: booking.currency || SYSTEM_CURRENCY,
-        income_date: new Date().toISOString().slice(0, 10),
+        income_date: booking.event_date || new Date().toISOString().slice(0, 10),
         notes: `${booking.event_title} · installment payment`,
       });
       if (incomeError) throw incomeError;
@@ -762,7 +762,7 @@ function ManualEventReservation({
           category: 'booking',
           amount: paid,
           currency: SYSTEM_CURRENCY,
-          income_date: new Date().toISOString().slice(0, 10),
+          income_date: form.startDate,
           notes: selected.title,
         });
       }

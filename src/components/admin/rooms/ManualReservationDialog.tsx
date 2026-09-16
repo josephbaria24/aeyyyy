@@ -217,7 +217,7 @@ export function ManualReservationDialog({
           category: 'booking',
           amount: paid,
           currency: SYSTEM_CURRENCY,
-          income_date: todayIsoLocal(),
+          income_date: form.checkIn,
           booking_id: inserted.id,
           notes: `${selectedRoom.name} (${form.checkIn} to ${form.checkOut})`,
         });

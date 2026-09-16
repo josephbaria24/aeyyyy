@@ -51,7 +51,8 @@ export async function syncBookingIncome(
       category: 'booking',
       amount: difference,
       currency: booking.currency || SYSTEM_CURRENCY,
-      income_date: todayIsoLocal(),
+      // Attribute booking revenue to the stay month, not the date it was entered.
+      income_date: booking.check_in || todayIsoLocal(),
       booking_id: booking.id,
       notes: `${booking.destination} (${booking.check_in} to ${booking.check_out}) · cumulative payment ${target} / due ${bookingGrandTotal(booking)}`,
     });
