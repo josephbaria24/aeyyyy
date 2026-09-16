@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Link2, Loader2, Receipt, Search, X } from 'lucide-react';
+import { ChevronDown, ImagePlus, Link2, Loader2, Receipt, Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useBookings, useInvalidateAdmin, useRooms } from '@/lib/admin/queries';
 import { formatMoney, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { logActivity } from '@/lib/admin/activity-log';
 import { syncBookingIncome } from '@/lib/admin/booking-income';
+import { BookingEvidenceDialog } from '@/components/admin/rooms/BookingEvidenceDialog';
 
 const EMPTY_BOOKINGS: Booking[] = [];
 
@@ -79,6 +80,7 @@ export function BookingsTab({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
   const [sort, setSort] = useState<BookingSort>('newest');
+  const [evidenceBooking, setEvidenceBooking] = useState<Booking | null>(null);
   const { drafts, setDrafts, ensureDraft } = usePaymentDrafts(bookings, rooms);
 
   const guestKey = guestEmail?.trim().toLowerCase() || '';
@@ -456,6 +458,15 @@ export function BookingsTab({
                           ),
                         )}
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setEvidenceBooking(booking)}>
+                          <ImagePlus className="mr-2 h-3.5 w-3.5" />
+                          Attachments
+                          {booking.evidence_urls.length > 0 && (
+                            <span className="ml-auto text-[10px] text-slate-400">
+                              {booking.evidence_urls.length}
+                            </span>
+                          )}
+                        </DropdownMenuItem>
                         <DropdownMenuItem asChild>
                           <Link href={`/admin/receipts/${booking.id}`} prefetch>
                             <Receipt className="mr-2 h-3.5 w-3.5" />
@@ -578,6 +589,15 @@ export function BookingsTab({
                               ),
                             )}
                             <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => setEvidenceBooking(booking)}>
+                              <ImagePlus className="mr-2 h-3.5 w-3.5" />
+                              Attachments
+                              {booking.evidence_urls.length > 0 && (
+                                <span className="ml-auto text-[10px] text-slate-400">
+                                  {booking.evidence_urls.length}
+                                </span>
+                              )}
+                            </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link href={`/admin/receipts/${booking.id}`} prefetch>
                                 <Receipt className="mr-2 h-3.5 w-3.5" />
@@ -607,6 +627,13 @@ export function BookingsTab({
           </div>
         </div>
       )}
+      <BookingEvidenceDialog
+        booking={evidenceBooking}
+        open={evidenceBooking != null}
+        onOpenChange={(open) => {
+          if (!open) setEvidenceBooking(null);
+        }}
+      />
     </>
   );
 }

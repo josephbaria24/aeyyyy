@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { ImagePlus, Loader2, Plus, Upload, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useInvalidateAdmin } from '@/lib/admin/queries';
 import {
@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { logActivity } from '@/lib/admin/activity-log';
+import { uploadToCloudinary } from '@/lib/upload';
 
 type ManualForm = {
   name: string;
@@ -100,6 +101,8 @@ export function ManualReservationDialog({
   const invalidate = useInvalidateAdmin();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [form, setForm] = useState<ManualForm>(() => initialForm(rooms[0]));
 
   useEffect(() => {
@@ -159,7 +162,40 @@ export function ManualReservationDialog({
     }));
   };
 
-  const reset = () => setForm(initialForm(rooms[0]));
+  const reset = () => {
+    setForm(initialForm(rooms[0]));
+    setEvidenceUrls([]);
+  };
+
+  const uploadEvidence = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    if (!selected.length) {
+      toast.error('Choose an image or screenshot');
+      return;
+    }
+    if (evidenceUrls.length + selected.length > 10) {
+      toast.error('A booking can have up to 10 attachments');
+      return;
+    }
+
+    setUploadingEvidence(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of selected) {
+        const asset = await uploadToCloudinary(file, 'aeyyyy/booking-evidence');
+        uploaded.push(asset.secure_url);
+      }
+      setEvidenceUrls((current) => [...current, ...uploaded]);
+      toast.success(`${uploaded.length} attachment${uploaded.length === 1 ? '' : 's'} ready`);
+    } catch (error) {
+      toast.error('Could not upload attachments', {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setUploadingEvidence(false);
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -203,6 +239,7 @@ export function ManualReservationDialog({
           amount: total,
           amount_paid: paid,
           other_charges: [],
+          evidence_urls: evidenceUrls,
           currency: SYSTEM_CURRENCY,
           notes: form.notes.trim() || 'Walk-in reservation',
         })
@@ -238,7 +275,10 @@ export function ManualReservationDialog({
       reset();
     } catch (error) {
       toast.error('Could not create reservation', {
-        description: error instanceof Error ? error.message : 'Insert failed',
+        description:
+          error instanceof Error
+            ? `${error.message} — run supabase/booking-evidence.sql if the evidence column is missing.`
+            : 'Insert failed',
       });
     } finally {
       setSaving(false);
@@ -249,7 +289,10 @@ export function ManualReservationDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!saving) setOpen(next);
+        if (!saving && !uploadingEvidence) {
+          setOpen(next);
+          if (!next) reset();
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -412,6 +455,64 @@ export function ManualReservationDialog({
                 placeholder="Visible to admins only"
               />
             </FieldLabel>
+
+            <div className="space-y-2 rounded-[11px] border border-sky-200/70 bg-sky-50/60 p-3 dark:border-sky-900/50 dark:bg-sky-950/20 sm:col-span-2">
+              <div className="flex items-center gap-2">
+                <ImagePlus className="h-4 w-4 text-sky-600" />
+                <div>
+                  <p className="text-xs font-bold text-sky-800 dark:text-sky-200">
+                    Booking attachments
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Add Booking.com screenshots or other proof. Admin-only.
+                  </p>
+                </div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[8px] bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700">
+                {uploadingEvidence ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {uploadingEvidence ? 'Uploading…' : 'Upload screenshots'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploadingEvidence}
+                  className="hidden"
+                  onChange={(event) => {
+                    const files = event.target.files;
+                    event.target.value = '';
+                    void uploadEvidence(files);
+                  }}
+                />
+              </label>
+              {evidenceUrls.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {evidenceUrls.map((url, index) => (
+                    <div key={`${url}-${index}`} className="group relative overflow-hidden rounded-[8px]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Evidence ${index + 1}`}
+                        className="aspect-square w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEvidenceUrls((current) => current.filter((item) => item !== url))
+                        }
+                        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"
+                        aria-label={`Remove evidence ${index + 1}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {availability.kind === 'unavailable' && (
@@ -437,7 +538,7 @@ export function ManualReservationDialog({
             </button>
             <button
               type="submit"
-              disabled={saving || blocked || invalidDates || rooms.length === 0}
+              disabled={saving || uploadingEvidence || blocked || invalidDates || rooms.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}

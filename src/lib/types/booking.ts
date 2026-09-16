@@ -60,6 +60,8 @@ export type Booking = {
   rate_per_night: number;
   amount_paid: number;
   other_charges: BookingCharge[];
+  /** Admin-only screenshots or photos that prove an external/manual reservation. */
+  evidence_urls: string[];
   currency: string;
   notes: string | null;
   linked_event_booking_id: string | null;
@@ -84,6 +86,7 @@ export type BookingInsert = {
   rate_per_night?: number;
   amount_paid?: number;
   other_charges?: BookingCharge[];
+  evidence_urls?: string[];
   currency?: string;
   notes?: string | null;
   linked_event_booking_id?: string | null;
@@ -188,6 +191,9 @@ export function normalizeBooking(row: Partial<Booking> & Record<string, unknown>
     rate_per_night: Number(row.rate_per_night) || 0,
     amount_paid: Number(row.amount_paid) || 0,
     other_charges: normalizeCharges(row.other_charges),
+    evidence_urls: Array.isArray(row.evidence_urls)
+      ? row.evidence_urls.filter((value): value is string => typeof value === 'string' && Boolean(value))
+      : [],
     currency: String(row.currency ?? 'PHP'),
     notes: (row.notes as string | null) ?? null,
     linked_event_booking_id: row.linked_event_booking_id

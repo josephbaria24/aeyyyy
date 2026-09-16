@@ -32,6 +32,7 @@ create table if not exists public.bookings (
   amount        numeric(12,2) not null default 0,
   amount_paid   numeric(12,2) not null default 0,
   other_charges jsonb not null default '[]'::jsonb,
+  evidence_urls text[] not null default '{}',
   currency      text not null default 'PHP',
   notes         text,
   created_at    timestamptz not null default now(),
