@@ -71,7 +71,7 @@ function MoneyInput({
   className?: string;
 }) {
   return (
-    <label className={cn('block min-w-[88px]', className)}>
+    <label className={cn('block min-w-0 w-full', className)}>
       <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </span>
@@ -87,7 +87,7 @@ function MoneyInput({
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           className={cn(
-            'w-full rounded-[5px] admin-hairline py-1 pl-5 pr-1.5 text-xs',
+            'box-border w-full min-w-0 rounded-[5px] admin-hairline py-1 pl-5 pr-1.5 text-xs',
             readOnly && 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300',
           )}
         />
@@ -159,8 +159,8 @@ export function BookingPaymentEditor({
   };
 
   return (
-    <div className={cn('min-w-[520px] space-y-1.5', className)}>
-      <div className="flex flex-wrap items-end gap-2">
+    <div className={cn('w-full min-w-0 max-w-full space-y-2', className)}>
+      <div className="grid grid-cols-2 items-end gap-2 sm:grid-cols-3 xl:grid-cols-[repeat(5,minmax(80px,1fr))_auto]">
         <MoneyInput
           label="Rate / night"
           value={draft.rate_per_night}
@@ -196,39 +196,41 @@ export function BookingPaymentEditor({
         />
         <MoneyInput label="Extras" value={extras} readOnly />
 
-        <button
-          type="button"
-          onClick={recalcStay}
-          title="Auto-calc stay from room rate × nights"
-          className="mb-0.5 inline-flex h-7 w-7 items-center justify-center rounded-[5px] border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving}
-          className="mb-0.5 rounded-[5px] bg-[#0a1628] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#12243d] disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-        >
-          {saving ? '…' : 'Save'}
-        </button>
+        <div className="col-span-2 flex items-center justify-end gap-1.5 sm:col-span-3 xl:col-span-1">
+          <button
+            type="button"
+            onClick={recalcStay}
+            title="Auto-calc stay from room rate × nights"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="h-8 rounded-[6px] bg-[#0a1628] px-3 text-xs font-semibold text-white hover:bg-[#12243d] disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+          >
+            {saving ? '…' : 'Save'}
+          </button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           Other
         </span>
         {draft.other_charges.map((charge) => (
           <div
             key={charge.id}
-            className="inline-flex items-center gap-1 rounded-[5px] border border-slate-200 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900"
+            className="flex w-full min-w-0 max-w-full items-center gap-1 rounded-[5px] border border-slate-200 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900 sm:w-auto"
           >
             <input
               type="text"
               placeholder="Item"
               value={charge.label}
               onChange={(e) => updateCharge(charge.id, { label: e.target.value })}
-              className="w-20 border-0 bg-transparent px-1 py-0.5 text-[11px] outline-none"
+              className="min-w-0 flex-1 border-0 bg-transparent px-1 py-0.5 text-[11px] outline-none sm:w-20"
             />
             <div className="relative w-16">
               <span className="pointer-events-none absolute left-0.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
