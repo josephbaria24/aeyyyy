@@ -1,5 +1,11 @@
 import { isBookingStatus, type BookingStatus } from '@/lib/types/booking';
 
+export type EventPaymentEntry = {
+  id: string;
+  amount: number;
+  paid_at: string;
+};
+
 export type EventBooking = {
   id: string;
   booking_code: string;
@@ -18,6 +24,7 @@ export type EventBooking = {
   status: BookingStatus;
   amount: number;
   amount_paid: number;
+  payment_history: EventPaymentEntry[];
   currency: string;
   notes: string | null;
   linked_room_booking_id: string | null;
@@ -69,6 +76,22 @@ export function roomBookingHrefFromEvent(opts: {
 export function normalizeEventBooking(
   row: Partial<EventBooking> & Record<string, unknown>,
 ): EventBooking {
+  const paymentHistory = Array.isArray(row.payment_history)
+    ? row.payment_history
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const value = entry as Partial<EventPaymentEntry>;
+          const amount = Number(value.amount) || 0;
+          if (amount <= 0) return null;
+          return {
+            id: String(value.id ?? ''),
+            amount,
+            paid_at: String(value.paid_at ?? ''),
+          };
+        })
+        .filter((entry): entry is EventPaymentEntry => Boolean(entry))
+    : [];
+
   return {
     id: String(row.id ?? ''),
     booking_code: String(row.booking_code ?? ''),
@@ -87,6 +110,7 @@ export function normalizeEventBooking(
     status: isBookingStatus(String(row.status ?? '')) ? (row.status as BookingStatus) : 'pending',
     amount: Number(row.amount) || 0,
     amount_paid: Number(row.amount_paid) || 0,
+    payment_history: paymentHistory,
     currency: String(row.currency ?? 'PHP'),
     notes: (row.notes as string | null) ?? null,
     linked_room_booking_id: row.linked_room_booking_id

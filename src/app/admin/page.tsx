@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
+import { ArrowUpRight } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -14,6 +15,16 @@ import {
 } from 'recharts';
 import { AdminIcon, adminIcons } from '@/components/admin/AdminIcon';
 import { useBookings, useExpenses, useIncome } from '@/lib/admin/queries';
+import {
+  buildStatsTermOptions,
+  dateInPeriod,
+  localDateValue,
+  parseLocalDate,
+  periodBounds,
+  statsPeriods,
+  statsTermOption,
+  type StatsPeriod,
+} from '@/lib/admin/stats-period';
 import { formatMoney, sumBy } from '@/lib/money';
 
 export default function AdminDashboardPage() {
@@ -22,6 +33,8 @@ export default function AdminDashboardPage() {
   const bookingsQuery = useBookings();
   const incomeQuery = useIncome();
   const expensesQuery = useExpenses();
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('month');
+  const [statsDate, setStatsDate] = useState(() => localDateValue());
 
   const bookings = bookingsQuery.data ?? [];
   const income = incomeQuery.data ?? [];
@@ -36,28 +49,152 @@ export default function AdminDashboardPage() {
     expensesQuery.error?.message ||
     '';
 
-  const totalIncome = sumBy(income, (i) => Number(i.amount));
-  const totalExpenses = sumBy(expenses, (e) => Number(e.amount));
+  const statsBounds = useMemo(
+    () => periodBounds(statsPeriod, statsDate),
+    [statsDate, statsPeriod],
+  );
+  const filteredIncome = useMemo(
+    () => income.filter((row) => dateInPeriod(row.income_date, statsBounds)),
+    [income, statsBounds],
+  );
+  const filteredExpenses = useMemo(
+    () => expenses.filter((row) => dateInPeriod(row.expense_date, statsBounds)),
+    [expenses, statsBounds],
+  );
+  const filteredBookings = useMemo(
+    () =>
+      bookings.filter((booking) =>
+        dateInPeriod(booking.created_at || booking.check_in, statsBounds),
+      ),
+    [bookings, statsBounds],
+  );
+  const statsTermOptions = useMemo(
+    () =>
+      buildStatsTermOptions(statsPeriod, [
+        ...income.map((row) => row.income_date),
+        ...expenses.map((row) => row.expense_date),
+        ...bookings.map((booking) => booking.created_at || booking.check_in),
+      ]),
+    [bookings, expenses, income, statsPeriod],
+  );
+  const selectedStatsTerm = statsTermOption(
+    statsPeriod,
+    parseLocalDate(statsDate),
+  ).value;
+
+  const totalIncome = sumBy(filteredIncome, (i) => Number(i.amount));
+  const totalExpenses = sumBy(filteredExpenses, (e) => Number(e.amount));
   const net = totalIncome - totalExpenses;
-  const pending = bookings.filter((b) => b.status === 'pending').length;
-  const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
-  const guests = new Set(bookings.map((b) => b.email.toLowerCase())).size;
+  const pending = filteredBookings.filter((b) => b.status === 'pending').length;
+  const confirmed = filteredBookings.filter((b) => b.status === 'confirmed').length;
+  const guests = new Set(filteredBookings.map((b) => b.email.toLowerCase())).size;
+  const confirmationRate = filteredBookings.length
+    ? Math.round((confirmed / filteredBookings.length) * 100)
+    : 0;
 
   const chartData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const buckets = days.map((day) => ({ day, income: 0, expenses: 0 }));
-    for (const row of income) {
-      const d = new Date(row.income_date);
-      if (!Number.isNaN(d.getTime())) buckets[d.getDay()].income += Number(row.amount) || 0;
-    }
-    for (const row of expenses) {
-      const d = new Date(row.expense_date);
-      if (!Number.isNaN(d.getTime())) buckets[d.getDay()].expenses += Number(row.amount) || 0;
-    }
-    return buckets;
-  }, [income, expenses]);
+    type ChartBucket = {
+      key: string;
+      day: string;
+      income: number;
+      expenses: number;
+    };
 
-  const recentBookings = bookings.slice(0, 6);
+    const buckets: ChartBucket[] = [];
+    const addDayBucket = (date: Date, label: string) => {
+      buckets.push({
+        key: localDateValue(date),
+        day: label,
+        income: 0,
+        expenses: 0,
+      });
+    };
+    const addMonthBucket = (date: Date) => {
+      buckets.push({
+        key: localDateValue(new Date(date.getFullYear(), date.getMonth(), 1)).slice(0, 7),
+        day: date.toLocaleDateString(undefined, { month: 'short' }),
+        income: 0,
+        expenses: 0,
+      });
+    };
+
+    if (statsPeriod === 'all') {
+      const years = new Set(
+        [...filteredIncome.map((row) => row.income_date), ...filteredExpenses.map((row) => row.expense_date)]
+          .map((value) => parseLocalDate(value).getFullYear()),
+      );
+      if (years.size === 0) years.add(new Date().getFullYear());
+      for (const year of Array.from(years).sort((a, b) => a - b)) {
+        buckets.push({
+          key: String(year),
+          day: String(year),
+          income: 0,
+          expenses: 0,
+        });
+      }
+    } else if (statsPeriod === 'year') {
+      const anchor = parseLocalDate(statsDate);
+      for (let month = 0; month < 12; month += 1) {
+        addMonthBucket(new Date(anchor.getFullYear(), month, 1));
+      }
+    } else if (statsPeriod === 'quarter' && statsBounds) {
+      for (let month = 0; month < 3; month += 1) {
+        addMonthBucket(
+          new Date(statsBounds.start.getFullYear(), statsBounds.start.getMonth() + month, 1),
+        );
+      }
+    } else if (statsPeriod === 'month' && statsBounds) {
+      const cursor = new Date(statsBounds.start);
+      while (cursor < statsBounds.end) {
+        addDayBucket(cursor, String(cursor.getDate()));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    } else if (statsPeriod === 'week' && statsBounds) {
+      const cursor = new Date(statsBounds.start);
+      while (cursor < statsBounds.end) {
+        addDayBucket(
+          cursor,
+          cursor.toLocaleDateString(undefined, { weekday: 'short' }),
+        );
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    } else {
+      const anchor = parseLocalDate(statsDate);
+      addDayBucket(
+        anchor,
+        anchor.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      );
+    }
+
+    const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+    const keyForDate = (value: string) => {
+      const date = parseLocalDate(value);
+      if (statsPeriod === 'all') return String(date.getFullYear());
+      if (statsPeriod === 'year' || statsPeriod === 'quarter') {
+        return localDateValue(new Date(date.getFullYear(), date.getMonth(), 1)).slice(0, 7);
+      }
+      return localDateValue(date);
+    };
+
+    for (const row of filteredIncome) {
+      const bucket = bucketMap.get(keyForDate(row.income_date));
+      if (bucket) bucket.income += Number(row.amount) || 0;
+    }
+    for (const row of filteredExpenses) {
+      const bucket = bucketMap.get(keyForDate(row.expense_date));
+      if (bucket) bucket.expenses += Number(row.amount) || 0;
+    }
+
+    return buckets;
+  }, [
+    filteredExpenses,
+    filteredIncome,
+    statsBounds,
+    statsDate,
+    statsPeriod,
+  ]);
+
+  const recentBookings = filteredBookings.slice(0, 6);
 
   if (isPending) {
     return (
@@ -73,6 +210,8 @@ export default function AdminDashboardPage() {
       value: formatMoney(totalIncome),
       icon: adminIcons.revenue,
       iconBg: 'bg-orange-100 text-orange-500 dark:bg-orange-950/50 dark:text-orange-400',
+      cardBg:
+        'border-orange-200/70 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900/40 dark:from-orange-950/30 dark:to-slate-900',
       delta: '+ income',
       up: true,
     },
@@ -81,14 +220,18 @@ export default function AdminDashboardPage() {
       value: String(pending),
       icon: adminIcons.pending,
       iconBg: 'bg-sky-100 text-sky-500 dark:bg-sky-950/50 dark:text-sky-400',
-      delta: `${bookings.length} total`,
+      cardBg:
+        'border-sky-200/70 bg-gradient-to-br from-sky-50 to-white dark:border-sky-900/40 dark:from-sky-950/30 dark:to-slate-900',
+      delta: `${filteredBookings.length} total`,
       up: false,
     },
     {
       label: 'Confirmed Stays',
       value: String(confirmed),
       icon: adminIcons.confirmed,
-      iconBg: 'bg-orange-100 text-orange-500 dark:bg-orange-950/50 dark:text-orange-400',
+      iconBg: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400',
+      cardBg:
+        'border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/40 dark:from-emerald-950/30 dark:to-slate-900',
       delta: '+ bookings',
       up: true,
     },
@@ -96,7 +239,9 @@ export default function AdminDashboardPage() {
       label: 'Unique Guests',
       value: String(guests),
       icon: adminIcons.guestsCard,
-      iconBg: 'bg-emerald-100 text-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-400',
+      iconBg: 'bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400',
+      cardBg:
+        'border-violet-200/70 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/40 dark:from-violet-950/30 dark:to-slate-900',
       delta: '+ guests',
       up: true,
     },
@@ -115,54 +260,129 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-3 rounded-[11px] bg-slate-200/70 p-2 dark:bg-slate-800">
+        <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
+          <label className="min-w-0">
+            <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Filter
+            </span>
+            <select
+              value={statsPeriod}
+              onChange={(event) => setStatsPeriod(event.target.value as StatsPeriod)}
+              className="h-9 w-full min-w-0 rounded-[8px] border-0 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none dark:bg-slate-950 dark:text-slate-200"
+            >
+              {statsPeriods.map((period) => (
+                <option key={period.value} value={period.value}>
+                  {period.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0">
+            <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Term
+            </span>
+            <select
+              value={selectedStatsTerm}
+              disabled={statsPeriod === 'all'}
+              onChange={(event) => setStatsDate(event.target.value)}
+              className="h-9 w-full min-w-0 rounded-[8px] border-0 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none disabled:opacity-60 dark:bg-slate-950 dark:text-slate-200"
+            >
+              {statsTermOptions.map((term) => (
+                <option key={term.value} value={term.value}>
+                  {term.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <section className="relative mb-3 overflow-hidden rounded-[16px] bg-slate-950 px-4 py-4 text-white sm:mb-5 sm:px-6 sm:py-5">
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-60 [background:radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.32),transparent_32%),radial-gradient(circle_at_55%_120%,rgba(16,185,129,0.25),transparent_42%)]"
+        />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-300 sm:text-xs">
+              Business snapshot
+            </p>
+            <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">
+              {formatMoney(net)}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-400">Current net balance</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <div
+              className="relative grid h-16 w-16 place-items-center rounded-full sm:h-20 sm:w-20"
+              style={{
+                background: `conic-gradient(#38bdf8 ${confirmationRate * 3.6}deg, rgba(255,255,255,.12) 0deg)`,
+              }}
+            >
+              <div className="grid h-[calc(100%-7px)] w-[calc(100%-7px)] place-items-center rounded-full bg-slate-950">
+                <span className="text-sm font-bold sm:text-base">{confirmationRate}%</span>
+              </div>
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-sm font-semibold">Confirmed</p>
+              <p className="text-xs text-slate-400">booking rate</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-5 sm:gap-3 xl:grid-cols-4">
         {kpis.map((card) => (
           <div
             key={card.label}
-            className="rounded-[13px] admin-hairline bg-white dark:bg-slate-900 p-5"
+            className={`min-w-0 rounded-[12px] border p-3 sm:p-4 ${card.cardBg}`}
           >
             <div className="flex items-start justify-between">
-              <div className={`flex h-11 w-11 items-center justify-center rounded-[13px] ${card.iconBg}`}>
-                <AdminIcon icon={card.icon} width={22} height={22} />
+              <div className={`flex h-8 w-8 items-center justify-center rounded-[9px] sm:h-10 sm:w-10 ${card.iconBg}`}>
+                <AdminIcon icon={card.icon} width={19} height={19} />
               </div>
               <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                className={`max-w-[5rem] truncate text-[9px] font-semibold sm:text-[11px] ${
                   card.up ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-500'
                 }`}
               >
                 {card.delta}
               </span>
             </div>
-            <p className="mt-4 text-sm font-medium text-slate-500 dark:text-slate-400">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{card.value}</p>
+            <p className="mt-2 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:text-sm">{card.label}</p>
+            <p className="mt-0.5 truncate text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-2xl">{card.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="rounded-[13px] admin-hairline bg-white dark:bg-slate-900 p-5 xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:mb-5 sm:gap-4 xl:grid-cols-3">
+        <div className="rounded-[12px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:p-5 xl:col-span-2">
+          <div className="mb-2 flex items-center justify-between sm:mb-4">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Revenue</h2>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Income vs expenses by weekday</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Income vs expenses for the selected term
+              </p>
             </div>
-            <span className="rounded-full bg-slate-50 dark:bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              Overview
-            </span>
+            <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500 sm:text-xs">
+              <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-sky-500" />Income</span>
+              <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-400" />Expense</span>
+            </div>
           </div>
-          <div className="h-64 w-full">
+          <div className="h-44 w-full sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="5%"
-                      stopColor={isDark ? '#f8fafc' : '#0f172a'}
-                      stopOpacity={0.25}
+                      stopColor="#0ea5e9"
+                      stopOpacity={0.3}
                     />
                     <stop
                       offset="95%"
-                      stopColor={isDark ? '#f8fafc' : '#0f172a'}
+                      stopColor="#0ea5e9"
                       stopOpacity={0}
                     />
                   </linearGradient>
@@ -172,7 +392,14 @@ export default function AdminDashboardPage() {
                   stroke={isDark ? '#334155' : '#e2e8f0'}
                   vertical={false}
                 />
-                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="day"
+                  interval="preserveStartEnd"
+                  minTickGap={18}
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(value) => formatMoney(Number(value ?? 0))}
@@ -187,46 +414,48 @@ export default function AdminDashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="income"
-                  stroke={isDark ? '#f8fafc' : '#0f172a'}
+                  stroke="#0ea5e9"
                   strokeWidth={2.5}
                   fill="url(#incomeFill)"
+                  dot={statsPeriod === 'day' ? { r: 4, fill: '#0ea5e9' } : false}
                 />
                 <Area
                   type="monotone"
                   dataKey="expenses"
-                  stroke={isDark ? '#94a3b8' : '#64748b'}
+                  stroke="#fb7185"
                   strokeWidth={2}
                   fill="transparent"
+                  dot={statsPeriod === 'day' ? { r: 4, fill: '#fb7185' } : false}
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="rounded-[13px] admin-hairline bg-white dark:bg-slate-900 p-5">
+        <div className="rounded-[12px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:p-5">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Finance Snapshot</h2>
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Current totals</p>
-          <div className="mt-6 space-y-4">
-            <div className="rounded-[13px] bg-emerald-50 p-4 dark:bg-emerald-900/45">
+          <div className="mt-3 grid grid-cols-3 gap-2 xl:mt-5 xl:grid-cols-1">
+            <div className="rounded-[10px] bg-emerald-50 p-3 dark:bg-emerald-900/45 xl:p-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <AdminIcon icon={adminIcons.income} width={18} height={18} />
-                <span className="text-xs font-semibold uppercase tracking-wide">Income</span>
+                <span className="hidden text-xs font-semibold uppercase tracking-wide sm:inline">Income</span>
               </div>
-              <p className="mt-2 text-xl font-bold text-emerald-700 dark:text-emerald-200">{formatMoney(totalIncome)}</p>
+              <p className="mt-2 truncate text-sm font-bold text-emerald-700 dark:text-emerald-200 sm:text-base xl:text-xl">{formatMoney(totalIncome)}</p>
             </div>
-            <div className="rounded-[13px] bg-rose-50 dark:bg-rose-950/40 p-4">
+            <div className="rounded-[10px] bg-rose-50 p-3 dark:bg-rose-950/40 xl:p-4">
               <div className="flex items-center gap-2 text-rose-600">
                 <AdminIcon icon={adminIcons.expense} width={18} height={18} />
-                <span className="text-xs font-semibold uppercase tracking-wide">Expenses</span>
+                <span className="hidden text-xs font-semibold uppercase tracking-wide sm:inline">Expenses</span>
               </div>
-              <p className="mt-2 text-xl font-bold text-rose-600">{formatMoney(totalExpenses)}</p>
+              <p className="mt-2 truncate text-sm font-bold text-rose-600 sm:text-base xl:text-xl">{formatMoney(totalExpenses)}</p>
             </div>
-            <div className="rounded-[13px] bg-slate-50 dark:bg-slate-800/60 p-4">
+            <div className="rounded-[10px] bg-sky-50 p-3 dark:bg-sky-950/30 xl:p-4">
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                 <AdminIcon icon={adminIcons.net} width={18} height={18} />
-                <span className="text-xs font-semibold uppercase tracking-wide">Net Profit</span>
+                <span className="hidden text-xs font-semibold uppercase tracking-wide sm:inline">Net Profit</span>
               </div>
-              <p className={`mt-2 text-xl font-bold ${net >= 0 ? 'text-slate-900 dark:text-slate-100' : 'text-rose-600'}`}>
+              <p className={`mt-2 truncate text-sm font-bold sm:text-base xl:text-xl ${net >= 0 ? 'text-sky-700 dark:text-sky-300' : 'text-rose-600'}`}>
                 {formatMoney(net)}
               </p>
             </div>
@@ -234,8 +463,8 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900">
-        <div className="flex flex-col gap-3 admin-hairline-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="overflow-hidden rounded-[12px] admin-hairline bg-white dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-3 admin-hairline-b px-4 py-3 sm:px-5 sm:py-4">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Recent Bookings</h2>
             <p className="text-xs text-slate-400 dark:text-slate-500">Latest guest reservation activity</p>
@@ -243,12 +472,47 @@ export default function AdminDashboardPage() {
           <Link
             href="/admin/rooms?tab=bookings"
             prefetch
-            className="inline-flex items-center justify-center rounded-[9px] bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            className="inline-flex shrink-0 items-center justify-center gap-1 rounded-[8px] bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 sm:px-4 sm:py-2 sm:text-sm"
           >
-            + Manage bookings
+            Manage <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <div className="overflow-x-auto">
+
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800 sm:hidden">
+          {recentBookings.map((booking) => (
+            <li key={booking.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {booking.name}
+                  </p>
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${
+                      booking.status === 'confirmed'
+                        ? 'bg-emerald-500'
+                        : booking.status === 'declined' || booking.status === 'cancelled'
+                          ? 'bg-rose-500'
+                          : booking.status === 'rescheduled'
+                            ? 'bg-sky-500'
+                            : 'bg-amber-500'
+                    }`}
+                  />
+                </div>
+                <p className="truncate text-[11px] text-slate-400">
+                  {booking.booking_code} · {booking.destination} · {booking.check_in}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-bold text-slate-800 dark:text-slate-100">
+                {formatMoney(Number(booking.amount || 0))}
+              </p>
+            </li>
+          ))}
+          {recentBookings.length === 0 && (
+            <li className="px-4 py-8 text-center text-sm text-slate-400">No bookings yet.</li>
+          )}
+        </ul>
+
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-slate-50/80 dark:bg-slate-800/80 text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
               <tr>
@@ -314,7 +578,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-5 sm:gap-4">
         {[
           {
             href: '/admin/rooms?tab=bookings',
@@ -339,13 +603,13 @@ export default function AdminDashboardPage() {
             key={item.href}
             href={item.href}
             prefetch
-            className="rounded-[13px] admin-hairline bg-white dark:bg-slate-900 p-5 transition hover:-translate-y-0.5"
+            className="group min-w-0 rounded-[11px] admin-hairline bg-white p-3 transition hover:-translate-y-0.5 dark:bg-slate-900 sm:p-5"
           >
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-[9px] bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+            <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-[8px] bg-slate-100 text-slate-900 transition group-hover:bg-sky-100 group-hover:text-sky-700 dark:bg-slate-800 dark:text-slate-100 sm:mb-3 sm:h-10 sm:w-10">
               <AdminIcon icon={item.icon} width={20} height={20} />
             </div>
-            <h3 className="font-bold text-slate-900 dark:text-slate-100">{item.title}</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{item.desc}</p>
+            <h3 className="truncate text-xs font-bold text-slate-900 dark:text-slate-100 sm:text-base">{item.title}</h3>
+            <p className="mt-1 hidden text-sm text-slate-500 dark:text-slate-400 sm:block">{item.desc}</p>
           </Link>
         ))}
       </div>

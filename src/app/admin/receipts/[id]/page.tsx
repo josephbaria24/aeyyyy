@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, Printer } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, Printer } from 'lucide-react';
 import { adminKeys, useBooking, useRooms } from '@/lib/admin/queries';
 import {
   calculateStayAmount,
@@ -18,6 +18,7 @@ import {
   otherChargesTotal,
   type Booking,
 } from '@/lib/types/booking';
+import { toast } from 'sonner';
 
 export default function BookingReceiptPage() {
   const params = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ export default function BookingReceiptPage() {
 
   const { data: fetchedBooking, isPending, error } = useBooking(params.id);
   const { data: rooms = [] } = useRooms();
+  const [downloading, setDownloading] = useState(false);
   const resolved = fetchedBooking ?? (cachedBooking ? normalizeBooking(cachedBooking) : null);
 
   const pricing = useMemo(() => {
@@ -94,9 +96,36 @@ export default function BookingReceiptPage() {
 
   const booking = resolved;
 
+  const downloadReceipt = async () => {
+    const receipt = document.getElementById('receipt');
+    if (!receipt) return;
+
+    setDownloading(true);
+    try {
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(receipt, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#fffdf8',
+      });
+      const link = document.createElement('a');
+      link.download = `Aeyyyy-receipt-${booking.booking_code}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.success('Receipt downloaded');
+    } catch (downloadError) {
+      toast.error('Could not download receipt', {
+        description:
+          downloadError instanceof Error ? downloadError.message : undefined,
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 px-4 py-8 dark:bg-slate-950">
-      <div className="mx-auto mb-4 flex max-w-2xl items-center justify-between print:hidden">
+    <div className="min-h-screen bg-slate-100 px-3 py-5 dark:bg-slate-950 sm:px-4 sm:py-8">
+      <div className="mx-auto mb-3 flex max-w-2xl items-center justify-between gap-2 print:hidden sm:mb-4">
         <Link
           href="/admin/rooms?tab=bookings"
           prefetch
@@ -104,39 +133,78 @@ export default function BookingReceiptPage() {
         >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Link>
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="inline-flex items-center rounded-[9px] bg-[#0a1628] px-4 py-2.5 text-sm font-semibold text-white"
-        >
-          <Printer className="mr-2 h-4 w-4" /> Print / Save PDF
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={downloading}
+            onClick={() => void downloadReceipt()}
+            className="inline-flex h-9 items-center rounded-[8px] bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 sm:text-sm"
+          >
+            {downloading ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-4 w-4" />
+            )}
+            Download
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex h-9 items-center rounded-[8px] bg-[#0a1628] px-3 text-xs font-semibold text-white sm:text-sm"
+          >
+            <Printer className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Print / Save PDF</span>
+            <span className="sm:hidden">PDF</span>
+          </button>
+        </div>
       </div>
 
       <div
         id="receipt"
-        className="mx-auto max-w-2xl rounded-[13px] bg-white p-8 sm:p-10 dark:bg-slate-900"
+        className="receipt-paper relative mx-auto max-w-2xl overflow-hidden rounded-[6px] border border-slate-200 bg-[#fffdf8] p-5 text-slate-900 shadow-xl shadow-slate-300/30 sm:p-9"
       >
-        <div className="border-b border-gray-200 pb-6 dark:border-slate-700">
-          <div className="flex items-center gap-3">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-[repeating-linear-gradient(135deg,#0f172a_0_10px,#f8fafc_10px_20px,#f59e0b_20px_30px,#f8fafc_30px_40px)]" />
+
+        <div className="border-b-2 border-dashed border-slate-200 pb-5 pt-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/images/logo.png"
               alt="Aeyyyy Traveller's Inn"
-              className="h-14 w-14 rounded-full object-cover"
+              className="h-12 w-12 rounded-full object-cover ring-2 ring-amber-200 sm:h-14 sm:w-14"
             />
-            <div className="flex flex-col leading-none font-black text-[#0a1628] dark:text-slate-100">
-              <span className="text-3xl">Aeyyyy</span>
-              <span className="mt-1 text-sm tracking-[0.15em]">TRAVELLER&apos;S INN</span>
+              <div className="flex flex-col font-black leading-none text-[#0a1628]">
+                <span className="text-2xl sm:text-3xl">Aeyyyy</span>
+                <span className="mt-1 text-[10px] tracking-[0.15em] sm:text-sm">
+                  TRAVELLER&apos;S INN
+                </span>
+              </div>
             </div>
+            <span
+              className={`rotate-[-4deg] rounded-[5px] border-2 px-2 py-1 text-[10px] font-black uppercase tracking-wider sm:text-xs ${
+                (pricing?.unpaid ?? 0) > 0
+                  ? 'border-rose-500 text-rose-600'
+                  : 'border-emerald-500 text-emerald-600'
+              }`}
+            >
+              {(pricing?.unpaid ?? 0) > 0 ? 'Balance due' : 'Paid'}
+            </span>
           </div>
-          <p className="mt-4 text-sm text-gray-500 dark:text-slate-400">Official Booking Receipt</p>
-          <p className="text-xs text-gray-400 dark:text-slate-500">
-            Generated {new Date().toLocaleString()}
-          </p>
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-800">OFFICIAL BOOKING RECEIPT</p>
+              <p className="receipt-muted text-[10px] text-slate-400">
+                Generated {new Date().toLocaleString()}
+              </p>
+            </div>
+            <p className="font-mono text-xs font-bold text-slate-700">
+              #{booking.booking_code}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
+        <div className="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 text-sm">
           <div>
             <p className="text-gray-500 dark:text-slate-400">Receipt No.</p>
             <p className="font-semibold text-[#0a1628] dark:text-slate-100">{booking.booking_code}</p>
@@ -202,8 +270,8 @@ export default function BookingReceiptPage() {
           </div>
         )}
 
-        <div className="mt-8 border-t border-gray-200 pt-6 dark:border-slate-700">
-          <h3 className="mb-3 text-sm font-semibold text-[#0a1628] dark:text-slate-100">
+        <div className="mt-6 border-t-2 border-dashed border-slate-200 pt-5">
+          <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#0a1628]">
             Payment summary
           </h3>
           <div className="space-y-2 text-sm">
@@ -228,9 +296,9 @@ export default function BookingReceiptPage() {
                 ))}
               </div>
             )}
-            <div className="flex justify-between gap-4 border-t border-gray-200 pt-2 dark:border-slate-700">
+            <div className="mt-2 flex items-end justify-between gap-4 border-y-2 border-dashed border-slate-300 bg-amber-50/60 px-2 py-3">
               <span className="font-semibold text-[#0a1628] dark:text-slate-100">Total due</span>
-              <span className="text-xl font-bold text-[#0a1628] dark:text-slate-100">
+              <span className="text-2xl font-black tracking-tight text-[#0a1628]">
                 {formatMoney(pricing?.due ?? 0)}
               </span>
             </div>
@@ -251,14 +319,39 @@ export default function BookingReceiptPage() {
               </span>
             </div>
           </div>
-          <p className="mt-6 text-center text-xs text-gray-400 dark:text-slate-500">
-            Thank you for choosing Aeyyyy Traveller&apos;s Inn.
-          </p>
+          <div className="mt-6 text-center">
+            <p className="text-sm font-bold text-slate-700">
+              Thank you for staying with us!
+            </p>
+            <p className="mt-1 text-[10px] text-slate-400">
+              Please keep this receipt for your records.
+            </p>
+          </div>
         </div>
       </div>
 
       <style jsx global>{`
+        #receipt {
+          color-scheme: light;
+        }
+        .dark #receipt [class*='dark:text-slate-100'] {
+          color: #0f172a !important;
+        }
+        .dark #receipt [class*='dark:text-slate-400'],
+        .dark #receipt [class*='dark:text-slate-500'] {
+          color: #64748b !important;
+        }
+        .dark #receipt [class*='dark:border-slate-700'] {
+          border-color: #e2e8f0 !important;
+        }
+        .dark #receipt [class*='dark:bg-slate-800'] {
+          background-color: #f8fafc !important;
+        }
         @media print {
+          @page {
+            size: auto;
+            margin: 12mm;
+          }
           body {
             background: white !important;
           }
@@ -276,6 +369,7 @@ export default function BookingReceiptPage() {
             width: 100%;
             box-shadow: none !important;
             border-radius: 0 !important;
+            border: 0 !important;
           }
         }
       `}</style>

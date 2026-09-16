@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ExternalLink, FileImage, Loader2, Plus, Trash2, TrendingDown, TrendingUp, Upload, Wallet } from 'lucide-react';
+import { ExternalLink, FileImage, Loader2, Plus, Search, Trash2, TrendingDown, TrendingUp, Upload, Wallet, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useExpenses, useIncome, useInvalidateAdmin } from '@/lib/admin/queries';
 import { formatMoney, sumBy, SYSTEM_CURRENCY, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
@@ -23,6 +23,125 @@ const expenseCategories: ExpenseCategory[] = [
   'marketing',
   'other',
 ];
+
+type StatsPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
+
+const statsPeriods: { value: StatsPeriod; label: string }[] = [
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'quarter', label: 'Quarter' },
+  { value: 'year', label: 'Year' },
+  { value: 'all', label: 'All' },
+];
+
+function localDateValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function periodBounds(period: StatsPeriod, anchorValue: string) {
+  if (period === 'all') return null;
+
+  const anchor = parseLocalDate(anchorValue);
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  const day = anchor.getDate();
+
+  if (period === 'day') {
+    return {
+      start: new Date(year, month, day),
+      end: new Date(year, month, day + 1),
+    };
+  }
+  if (period === 'week') {
+    const mondayOffset = (anchor.getDay() + 6) % 7;
+    return {
+      start: new Date(year, month, day - mondayOffset),
+      end: new Date(year, month, day - mondayOffset + 7),
+    };
+  }
+  if (period === 'month') {
+    return {
+      start: new Date(year, month, 1),
+      end: new Date(year, month + 1, 1),
+    };
+  }
+  if (period === 'quarter') {
+    const quarterMonth = Math.floor(month / 3) * 3;
+    return {
+      start: new Date(year, quarterMonth, 1),
+      end: new Date(year, quarterMonth + 3, 1),
+    };
+  }
+  return {
+    start: new Date(year, 0, 1),
+    end: new Date(year + 1, 0, 1),
+  };
+}
+
+function statsPeriodLabel(period: StatsPeriod, anchorValue: string) {
+  if (period === 'all') return 'All-time totals';
+  const anchor = parseLocalDate(anchorValue);
+  const bounds = periodBounds(period, anchorValue);
+
+  if (period === 'day') {
+    return anchor.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  if (period === 'week' && bounds) {
+    const end = new Date(bounds.end);
+    end.setDate(end.getDate() - 1);
+    return `${bounds.start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}–${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  }
+  if (period === 'month') {
+    return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+  if (period === 'quarter') {
+    return `Q${Math.floor(anchor.getMonth() / 3) + 1} ${anchor.getFullYear()}`;
+  }
+  return String(anchor.getFullYear());
+}
+
+function statsTermOption(period: StatsPeriod, date: Date) {
+  const anchor = localDateValue(date);
+  if (period === 'day') {
+    return { value: anchor, label: statsPeriodLabel(period, anchor) };
+  }
+  if (period === 'week') {
+    const bounds = periodBounds(period, anchor);
+    return {
+      value: bounds ? localDateValue(bounds.start) : anchor,
+      label: statsPeriodLabel(period, anchor),
+    };
+  }
+  if (period === 'month') {
+    const value = localDateValue(new Date(date.getFullYear(), date.getMonth(), 1));
+    return { value, label: statsPeriodLabel(period, value) };
+  }
+  if (period === 'quarter') {
+    const quarterMonth = Math.floor(date.getMonth() / 3) * 3;
+    const value = localDateValue(new Date(date.getFullYear(), quarterMonth, 1));
+    return { value, label: statsPeriodLabel(period, value) };
+  }
+  if (period === 'year') {
+    const value = localDateValue(new Date(date.getFullYear(), 0, 1));
+    return { value, label: statsPeriodLabel(period, value) };
+  }
+  return { value: 'all', label: 'All time' };
+}
+
+function dateInPeriod(value: string, bounds: ReturnType<typeof periodBounds>) {
+  if (!bounds) return true;
+  const date = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(date.getTime()) && date >= bounds.start && date < bounds.end;
+}
 
 const emptyIncome = {
   title: '',
@@ -53,6 +172,13 @@ export default function AdminAccountingPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('month');
+  const [statsDate, setStatsDate] = useState(() => localDateValue());
+  const [entryType, setEntryType] = useState<'income' | 'expense'>('income');
+  const [ledgerType, setLedgerType] = useState<'income' | 'expense'>('income');
+  const [incomeSearch, setIncomeSearch] = useState('');
+  const [expenseSearch, setExpenseSearch] = useState('');
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
   const [incomeForm, setIncomeForm] = useState(emptyIncome);
   const [expenseForm, setExpenseForm] = useState(emptyExpense);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -69,6 +195,24 @@ export default function AdminAccountingPage() {
     () => expenses.filter((e) => !e.receipt_url),
     [expenses],
   );
+  const filteredIncome = useMemo(() => {
+    const term = incomeSearch.trim().toLowerCase();
+    if (!term) return income;
+    return income.filter((row) =>
+      [row.title, row.category, row.income_date, row.notes, row.amount].some((value) =>
+        String(value ?? '').toLowerCase().includes(term),
+      ),
+    );
+  }, [income, incomeSearch]);
+  const filteredExpenses = useMemo(() => {
+    const term = expenseSearch.trim().toLowerCase();
+    if (!term) return expenses;
+    return expenses.filter((row) =>
+      [row.title, row.category, row.expense_date, row.notes, row.amount].some((value) =>
+        String(value ?? '').toLowerCase().includes(term),
+      ),
+    );
+  }, [expenseSearch, expenses]);
 
   const addIncome = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,8 +394,39 @@ export default function AdminAccountingPage() {
     }
   };
 
-  const totalIncome = sumBy(income, (i) => Number(i.amount));
-  const totalExpenses = sumBy(expenses, (e) => Number(e.amount));
+  const statsBounds = useMemo(
+    () => periodBounds(statsPeriod, statsDate),
+    [statsDate, statsPeriod],
+  );
+  const statsIncome = useMemo(
+    () => income.filter((row) => dateInPeriod(row.income_date, statsBounds)),
+    [income, statsBounds],
+  );
+  const statsExpenses = useMemo(
+    () => expenses.filter((row) => dateInPeriod(row.expense_date, statsBounds)),
+    [expenses, statsBounds],
+  );
+  const statsTermOptions = useMemo(() => {
+    if (statsPeriod === 'all') return [{ value: 'all', label: 'All time' }];
+
+    const dates = [
+      new Date(),
+      ...income.map((row) => parseLocalDate(row.income_date)),
+      ...expenses.map((row) => parseLocalDate(row.expense_date)),
+    ];
+    const unique = new Map<string, string>();
+    for (const date of dates) {
+      const option = statsTermOption(statsPeriod, date);
+      unique.set(option.value, option.label);
+    }
+
+    return Array.from(unique, ([value, label]) => ({ value, label })).sort((a, b) =>
+      b.value.localeCompare(a.value),
+    );
+  }, [expenses, income, statsPeriod]);
+  const selectedStatsTerm = statsTermOption(statsPeriod, parseLocalDate(statsDate)).value;
+  const totalIncome = sumBy(statsIncome, (i) => Number(i.amount));
+  const totalExpenses = sumBy(statsExpenses, (e) => Number(e.amount));
   const net = totalIncome - totalExpenses;
   const displayError =
     error ||
@@ -263,7 +438,7 @@ export default function AdminAccountingPage() {
       : '');
 
   return (
-    <div className="min-w-0">
+    <div className="accounting-page min-w-0">
       {displayError && (
         <div className="mb-3 rounded-[9px] border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400 sm:mb-4 sm:px-4 sm:py-3">
           {displayError}
@@ -276,6 +451,44 @@ export default function AdminAccountingPage() {
         </div>
       ) : (
         <>
+          <div className="mb-3 rounded-[11px] bg-slate-200/70 p-2 dark:bg-slate-800">
+            <div className="grid grid-cols-[0.8fr_1.2fr] gap-2">
+              <label className="min-w-0">
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Filter
+                </span>
+                <select
+                  value={statsPeriod}
+                  onChange={(event) => setStatsPeriod(event.target.value as StatsPeriod)}
+                  className="h-9 w-full min-w-0 rounded-[8px] border-0 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none dark:bg-slate-950 dark:text-slate-200"
+                >
+                  {statsPeriods.map((period) => (
+                    <option key={period.value} value={period.value}>
+                      {period.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-0">
+                <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Term
+                </span>
+                <select
+                  value={selectedStatsTerm}
+                  disabled={statsPeriod === 'all'}
+                  onChange={(event) => setStatsDate(event.target.value)}
+                  className="h-9 w-full min-w-0 rounded-[8px] border-0 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none disabled:opacity-60 dark:bg-slate-950 dark:text-slate-200"
+                >
+                  {statsTermOptions.map((term) => (
+                    <option key={term.value} value={term.value}>
+                      {term.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
           <div className="mb-4 grid grid-cols-3 gap-2 sm:mb-6 sm:gap-4">
             <div className="rounded-[12px] border border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-white p-3 dark:border-emerald-900/40 dark:from-emerald-950/50 dark:to-slate-900 sm:p-5">
               <div className="mb-1 flex items-center gap-1">
@@ -334,8 +547,43 @@ export default function AdminAccountingPage() {
             </div>
           </div>
 
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-[11px] bg-slate-200/70 p-1 dark:bg-slate-800 xl:hidden">
+            <button
+              type="button"
+              onClick={() => setEntryType('income')}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                entryType === 'income'
+                  ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-300'
+                  : 'text-slate-500 dark:text-slate-400',
+              )}
+            >
+              <TrendingUp className="h-4 w-4" />
+              Add income
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryType('expense')}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                entryType === 'expense'
+                  ? 'bg-white text-rose-700 shadow-sm dark:bg-slate-900 dark:text-rose-300'
+                  : 'text-slate-500 dark:text-slate-400',
+              )}
+            >
+              <TrendingDown className="h-4 w-4" />
+              Add expense
+            </button>
+          </div>
+
           <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 xl:grid-cols-2 xl:gap-6">
-            <form onSubmit={addIncome} className="rounded-[12px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:p-6">
+            <form
+              onSubmit={addIncome}
+              className={cn(
+                'rounded-[12px] border border-emerald-200/70 bg-gradient-to-br from-white to-emerald-50/40 p-4 dark:border-emerald-900/40 dark:from-slate-900 dark:to-emerald-950/20 sm:p-5',
+                entryType !== 'income' && 'hidden xl:block',
+              )}
+            >
               <div className="mb-3 flex items-center gap-2 sm:mb-4">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
                   <TrendingUp className="h-4 w-4" />
@@ -391,7 +639,7 @@ export default function AdminAccountingPage() {
                   placeholder="Notes (optional)"
                   value={incomeForm.notes}
                   onChange={(e) => setIncomeForm({ ...incomeForm, notes: e.target.value })}
-                  className={fieldClass}
+                  className={`${fieldClass} h-10 resize-none sm:h-auto`}
                   rows={2}
                 />
                 <button
@@ -404,7 +652,13 @@ export default function AdminAccountingPage() {
               </div>
             </form>
 
-            <form onSubmit={addExpense} className="rounded-[12px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:p-6">
+            <form
+              onSubmit={addExpense}
+              className={cn(
+                'rounded-[12px] border border-rose-200/70 bg-gradient-to-br from-white to-rose-50/40 p-4 dark:border-rose-900/40 dark:from-slate-900 dark:to-rose-950/20 sm:p-5',
+                entryType !== 'expense' && 'hidden xl:block',
+              )}
+            >
               <div className="mb-3 flex items-center gap-2 sm:mb-4">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
                   <TrendingDown className="h-4 w-4" />
@@ -463,7 +717,7 @@ export default function AdminAccountingPage() {
                   placeholder="Notes (optional)"
                   value={expenseForm.notes}
                   onChange={(e) => setExpenseForm({ ...expenseForm, notes: e.target.value })}
-                  className={fieldClass}
+                  className={`${fieldClass} h-10 resize-none sm:h-auto`}
                   rows={2}
                 />
                 <div>
@@ -497,8 +751,14 @@ export default function AdminAccountingPage() {
             </form>
           </div>
 
-          <div className="mb-4 rounded-[12px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:mb-6 sm:p-6">
-            <div className="mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-4 overflow-hidden rounded-[12px] border border-amber-200/80 bg-gradient-to-b from-amber-50/90 to-orange-50/50 shadow-sm shadow-amber-100/60 dark:border-amber-900/50 dark:from-amber-950/25 dark:to-orange-950/10 dark:shadow-none sm:mb-6">
+            <button
+              type="button"
+              onClick={() => setReceiptsOpen((open) => !open)}
+              aria-expanded={receiptsOpen}
+              aria-controls="accounting-receipts-content"
+              className="flex w-full cursor-pointer items-center justify-between gap-3 bg-gradient-to-r from-amber-100/80 via-orange-50/80 to-amber-50/70 p-4 text-left hover:from-amber-100 hover:to-orange-100/70 dark:from-amber-950/45 dark:via-orange-950/20 dark:to-amber-950/20 dark:hover:from-amber-950/60 sm:p-5"
+            >
               <div className="flex items-start gap-2">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
                   <FileImage className="h-4 w-4" />
@@ -510,13 +770,34 @@ export default function AdminAccountingPage() {
                   </p>
                 </div>
               </div>
-              <p className="text-[11px] font-semibold text-slate-400 sm:text-xs">
-                {expensesWithReceipts.length} saved
-                {expensesMissingReceipt.length > 0 ? ` · ${expensesMissingReceipt.length} missing` : ''}
-              </p>
-            </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <p className="hidden text-[11px] font-semibold text-slate-400 xs:block sm:text-xs">
+                  {expensesWithReceipts.length} saved
+                  {expensesMissingReceipt.length > 0 ? ` · ${expensesMissingReceipt.length} missing` : ''}
+                </p>
+                <span
+                  className={cn(
+                    'grid h-7 w-7 place-items-center rounded-full bg-amber-50 text-sm font-bold text-amber-700 transition-transform duration-300 dark:bg-amber-950/40 dark:text-amber-300',
+                    receiptsOpen && 'rotate-180',
+                  )}
+                >
+                  ↓
+                </span>
+              </div>
+            </button>
 
-            <div className="mb-4 grid gap-2 rounded-[10px] border border-amber-200/60 bg-amber-50/50 p-3 dark:border-amber-900/30 dark:bg-amber-950/20 sm:mb-5 sm:gap-3 sm:p-4 md:grid-cols-[1fr_auto] md:items-end">
+            <div
+              id="accounting-receipts-content"
+              className={cn(
+                'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+                receiptsOpen
+                  ? 'grid-rows-[1fr] opacity-100'
+                  : 'pointer-events-none grid-rows-[0fr] opacity-0',
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="max-h-[65vh] overflow-y-auto overscroll-contain border-t border-amber-200/70 bg-white/65 px-4 pb-4 pt-3 dark:border-amber-900/40 dark:bg-slate-900/65 sm:px-5 sm:pb-5">
+              <div className="mb-4 grid gap-2 rounded-[10px] border border-amber-200/60 bg-amber-50/50 p-3 dark:border-amber-900/30 dark:bg-amber-950/20 sm:mb-5 sm:gap-3 sm:p-4 md:grid-cols-[1fr_auto] md:items-end">
               <label className="block min-w-0 text-xs font-semibold text-slate-600 dark:text-slate-300">
                 Attach to expense
                 <select
@@ -557,30 +838,30 @@ export default function AdminAccountingPage() {
                   }}
                 />
               </label>
-            </div>
+              </div>
 
-            {expenses.length === 0 ? (
-              <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
-                Add an expense first, then upload its receipt here.
-              </p>
-            ) : expensesWithReceipts.length === 0 ? (
-              <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
-                No receipts yet. Select an expense above and upload a file.
-              </p>
-            ) : (
-              <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3">
-                {expensesWithReceipts.map((row) => {
-                  const isPdf = /\.pdf($|\?)/i.test(row.receipt_url || '');
-                  return (
-                    <li
-                      key={row.id}
-                      className="overflow-hidden rounded-[10px] border border-amber-200/50 bg-amber-50/30 dark:border-amber-900/30 dark:bg-amber-950/10"
-                    >
+              {expenses.length === 0 ? (
+                <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+                  Add an expense first, then upload its receipt here.
+                </p>
+              ) : expensesWithReceipts.length === 0 ? (
+                <p className="rounded-[9px] border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+                  No receipts yet. Select an expense above and upload a file.
+                </p>
+              ) : (
+                <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3">
+                  {expensesWithReceipts.map((row) => {
+                    const isPdf = /\.pdf($|\?)/i.test(row.receipt_url || '');
+                    return (
+                      <li
+                        key={row.id}
+                        className="overflow-hidden rounded-[10px] border border-amber-200/50 bg-amber-50/30 dark:border-amber-900/30 dark:bg-amber-950/10"
+                      >
                       <a
                         href={row.receipt_url!}
                         target="_blank"
                         rel="noreferrer"
-                        className="block aspect-[16/10] bg-slate-100 dark:bg-slate-800 sm:aspect-[4/3]"
+                        className="block h-32 bg-slate-100 dark:bg-slate-800 sm:aspect-[4/3] sm:h-auto"
                       >
                         {isPdf ? (
                           <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
@@ -644,22 +925,86 @@ export default function AdminAccountingPage() {
                           </button>
                         </div>
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                )}
+              </div>
+            </div>
+          </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-2 xl:gap-6">
-            <div className="overflow-hidden rounded-[12px] admin-hairline bg-white dark:bg-slate-900">
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-1 rounded-[11px] bg-slate-200/70 p-1 dark:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => setLedgerType('income')}
+                className={cn(
+                  'inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-xs font-bold transition',
+                  ledgerType === 'income'
+                    ? 'bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-300'
+                    : 'text-slate-500 dark:text-slate-400',
+                )}
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Income
+                <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                  {income.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLedgerType('expense')}
+                className={cn(
+                  'inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-xs font-bold transition',
+                  ledgerType === 'expense'
+                    ? 'bg-white text-rose-700 shadow-sm dark:bg-slate-900 dark:text-rose-300'
+                    : 'text-slate-500 dark:text-slate-400',
+                )}
+              >
+                <TrendingDown className="h-3.5 w-3.5" />
+                Expenses
+                <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                  {expenses.length}
+                </span>
+              </button>
+            </div>
+
+            <div
+              className={cn(
+                'overflow-hidden rounded-[12px] admin-hairline bg-white dark:bg-slate-900',
+                ledgerType !== 'income' ? 'hidden' : 'accounting-panel-in',
+              )}
+            >
               <div className="flex items-center gap-2 border-b border-emerald-200/60 bg-emerald-50/50 px-3 py-2.5 dark:border-emerald-900/30 dark:bg-emerald-950/20 sm:px-4 sm:py-3">
                 <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-sm font-bold text-emerald-800 dark:text-emerald-200 sm:text-base">Income Ledger</span>
               </div>
+              <label className="relative block border-b border-slate-100 p-2 dark:border-slate-800">
+                <span className="sr-only">Search income ledger</span>
+                <Search className="pointer-events-none absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={incomeSearch}
+                  onChange={(event) => setIncomeSearch(event.target.value)}
+                  placeholder="Search title, category, date or amount…"
+                  className="h-8 w-full rounded-[8px] border-0 bg-slate-100 pl-8 pr-8 text-xs text-slate-700 outline-none focus:bg-white dark:bg-slate-950 dark:text-slate-200"
+                />
+                {incomeSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setIncomeSearch('')}
+                    aria-label="Clear income search"
+                    className="absolute right-4 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </label>
 
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">
-                {income.map((row) => (
+              <ul className="max-h-[55dvh] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800 md:hidden">
+                {filteredIncome.map((row) => (
                   <li key={row.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.title}</p>
@@ -679,16 +1024,16 @@ export default function AdminAccountingPage() {
                     </div>
                   </li>
                 ))}
-                {income.length === 0 && (
+                {filteredIncome.length === 0 && (
                   <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
-                    No income records yet.
+                    {incomeSearch ? 'No matching income records.' : 'No income records yet.'}
                   </li>
                 )}
               </ul>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden max-h-[60dvh] overflow-auto md:block">
                 <table className="w-full min-w-[480px] text-sm">
-                  <thead className="bg-emerald-50/50 text-xs uppercase text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
+                  <thead className="sticky top-0 z-[1] bg-emerald-50 text-xs uppercase text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                     <tr>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Date</th>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Title</th>
@@ -697,7 +1042,7 @@ export default function AdminAccountingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {income.map((row) => (
+                    {filteredIncome.map((row) => (
                       <tr key={row.id} className="border-b border-gray-50 dark:border-slate-800">
                         <td className="px-3 py-2.5 sm:px-4 sm:py-3">{row.income_date}</td>
                         <td className="px-3 py-2.5 sm:px-4 sm:py-3">
@@ -718,10 +1063,10 @@ export default function AdminAccountingPage() {
                         </td>
                       </tr>
                     ))}
-                    {income.length === 0 && (
+                    {filteredIncome.length === 0 && (
                       <tr>
                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                          No income records yet.
+                          {incomeSearch ? 'No matching income records.' : 'No income records yet.'}
                         </td>
                       </tr>
                     )}
@@ -730,14 +1075,40 @@ export default function AdminAccountingPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-[12px] admin-hairline bg-white dark:bg-slate-900">
+            <div
+              className={cn(
+                'overflow-hidden rounded-[12px] admin-hairline bg-white dark:bg-slate-900',
+                ledgerType !== 'expense' ? 'hidden' : 'accounting-panel-in',
+              )}
+            >
               <div className="flex items-center gap-2 border-b border-rose-200/60 bg-rose-50/50 px-3 py-2.5 dark:border-rose-900/30 dark:bg-rose-950/20 sm:px-4 sm:py-3">
                 <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                 <span className="text-sm font-bold text-rose-800 dark:text-rose-200 sm:text-base">Expense Ledger</span>
               </div>
+              <label className="relative block border-b border-slate-100 p-2 dark:border-slate-800">
+                <span className="sr-only">Search expense ledger</span>
+                <Search className="pointer-events-none absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={expenseSearch}
+                  onChange={(event) => setExpenseSearch(event.target.value)}
+                  placeholder="Search title, category, date or amount…"
+                  className="h-8 w-full rounded-[8px] border-0 bg-slate-100 pl-8 pr-8 text-xs text-slate-700 outline-none focus:bg-white dark:bg-slate-950 dark:text-slate-200"
+                />
+                {expenseSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setExpenseSearch('')}
+                    aria-label="Clear expense search"
+                    className="absolute right-4 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </label>
 
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">
-                {expenses.map((row) => (
+              <ul className="max-h-[55dvh] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800 md:hidden">
+                {filteredExpenses.map((row) => (
                   <li key={row.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.title}</p>
@@ -789,16 +1160,16 @@ export default function AdminAccountingPage() {
                     </div>
                   </li>
                 ))}
-                {expenses.length === 0 && (
+                {filteredExpenses.length === 0 && (
                   <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
-                    No expense records yet.
+                    {expenseSearch ? 'No matching expense records.' : 'No expense records yet.'}
                   </li>
                 )}
               </ul>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden max-h-[60dvh] overflow-auto md:block">
                 <table className="w-full min-w-[480px] text-sm">
-                  <thead className="bg-rose-50/50 text-xs uppercase text-rose-700 dark:bg-rose-950/20 dark:text-rose-300">
+                  <thead className="sticky top-0 z-[1] bg-rose-50 text-xs uppercase text-rose-700 dark:bg-rose-950 dark:text-rose-300">
                     <tr>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Date</th>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Title</th>
@@ -807,7 +1178,7 @@ export default function AdminAccountingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map((row) => (
+                    {filteredExpenses.map((row) => (
                       <tr key={row.id} className="border-b border-gray-50 dark:border-slate-800">
                         <td className="px-3 py-2.5 sm:px-4 sm:py-3">{row.expense_date}</td>
                         <td className="px-3 py-2.5 sm:px-4 sm:py-3">
@@ -858,10 +1229,10 @@ export default function AdminAccountingPage() {
                         </td>
                       </tr>
                     ))}
-                    {expenses.length === 0 && (
+                    {filteredExpenses.length === 0 && (
                       <tr>
                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                          No expense records yet.
+                          {expenseSearch ? 'No matching expense records.' : 'No expense records yet.'}
                         </td>
                       </tr>
                     )}
@@ -906,6 +1277,86 @@ export default function AdminAccountingPage() {
           if (pendingDeleteExpense) await deleteExpense(pendingDeleteExpense.id);
         }}
       />
+
+      <style jsx global>{`
+        @keyframes accounting-rise {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes accounting-panel {
+          from {
+            opacity: 0;
+            transform: translateX(8px) scale(0.995);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+          }
+        }
+
+        .accounting-page > div,
+        .accounting-page > details {
+          animation: accounting-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .accounting-page > :nth-child(2) {
+          animation-delay: 45ms;
+        }
+
+        .accounting-page > :nth-child(3) {
+          animation-delay: 90ms;
+        }
+
+        .accounting-page > :nth-child(4) {
+          animation-delay: 135ms;
+        }
+
+        .accounting-panel-in {
+          animation: accounting-panel 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .accounting-page button,
+        .accounting-page a,
+        .accounting-page input,
+        .accounting-page select,
+        .accounting-page textarea,
+        .accounting-page summary {
+          transition:
+            color 180ms ease,
+            background-color 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            opacity 180ms ease,
+            transform 180ms ease;
+        }
+
+        .accounting-page button:active {
+          transform: scale(0.97);
+        }
+
+        .accounting-page input:focus,
+        .accounting-page select:focus,
+        .accounting-page textarea:focus {
+          box-shadow: 0 0 0 3px rgb(15 23 42 / 8%);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .accounting-page *,
+          .accounting-page > div,
+          .accounting-page > details,
+          .accounting-panel-in {
+            animation: none !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

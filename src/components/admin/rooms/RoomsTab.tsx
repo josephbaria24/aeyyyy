@@ -78,17 +78,33 @@ export function RoomsTab() {
 
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [mobilePanel, setMobilePanel] = useState<'form' | 'rooms'>('form');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [roomSearch, setRoomSearch] = useState('');
   const [customAmenity, setCustomAmenity] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Room | null>(null);
+
+  const filteredRooms = useMemo(() => {
+    const term = roomSearch.trim().toLowerCase();
+    if (!term) return rooms;
+    return rooms.filter((room) =>
+      [
+        room.name,
+        room.category,
+        room.description,
+        ...(room.amenities ?? []),
+      ].some((value) => String(value ?? '').toLowerCase().includes(term)),
+    );
+  }, [roomSearch, rooms]);
 
   const presetLabels = new Set<string>(ROOM_AMENITIES.map((a) => a.label));
   const customSelected = form.amenities.filter((a) => !presetLabels.has(a));
 
   const startEdit = (room: Room) => {
     setEditingId(room.id);
+    setMobilePanel('form');
     setCustomAmenity('');
     setForm({
       name: room.name,
@@ -210,6 +226,7 @@ export function RoomsTab() {
       resetForm();
       await invalidate(['rooms', 'activity']);
       toast.success(editingId ? 'Room updated' : 'Room added');
+      setMobilePanel('rooms');
     } catch (err) {
       const raw =
         err && typeof err === 'object' && 'message' in err
@@ -306,21 +323,76 @@ export function RoomsTab() {
         </div>
       )}
 
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-[11px] bg-slate-200/70 p-1 dark:bg-slate-800 xl:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePanel('form')}
+          className={cn(
+            'inline-flex items-center justify-center gap-2 rounded-[8px] px-3 py-2 text-xs font-bold transition',
+            mobilePanel === 'form'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
+              : 'text-slate-500 dark:text-slate-400',
+          )}
+        >
+          <Plus className="h-4 w-4" />
+          {editingId ? 'Edit room' : 'Add room'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePanel('rooms')}
+          className={cn(
+            'inline-flex items-center justify-center gap-2 rounded-[8px] px-3 py-2 text-xs font-bold transition',
+            mobilePanel === 'rooms'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white'
+              : 'text-slate-500 dark:text-slate-400',
+          )}
+        >
+          <AdminIcon icon={adminIcons.rooms} width={16} height={16} />
+          Rooms
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] dark:bg-slate-800">
+            {rooms.length}
+          </span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(280px,0.95fr)_minmax(0,1.35fr)] xl:items-start">
         {/* Left: room list */}
-        <div className="overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-10rem)] xl:flex xl:flex-col">
+        <div
+          className={cn(
+            'order-2 max-h-[60dvh] min-h-0 flex-col overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900 sm:max-h-[65dvh] xl:order-1 xl:sticky xl:top-0 xl:flex xl:max-h-[calc(100dvh-10rem)]',
+            mobilePanel === 'rooms' ? 'flex' : 'hidden',
+          )}
+        >
           <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
             <h2 className="text-sm font-bold text-[#0a1628] dark:text-slate-100">Rooms</h2>
-            <span className="text-xs text-slate-400">{rooms.length} total</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+              {roomSearch.trim() ? `${filteredRooms.length}/${rooms.length}` : `${rooms.length} total`}
+            </span>
+          </div>
+
+          <div className="relative shrink-0 border-b border-slate-100 p-2.5 dark:border-slate-800">
+            <AdminIcon
+              icon={adminIcons.search}
+              width={16}
+              height={16}
+              className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={roomSearch}
+              onChange={(event) => setRoomSearch(event.target.value)}
+              placeholder="Search rooms, category, amenities…"
+              className="h-9 w-full rounded-[8px] border-0 bg-slate-100 pl-9 pr-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-slate-900/10 dark:bg-slate-950 dark:text-slate-200 dark:focus:ring-white/10"
+            />
           </div>
 
           {isPending ? (
-            <div className="flex h-48 items-center justify-center">
+            <div className="flex min-h-40 flex-1 items-center justify-center">
               <Loader2 className="h-7 w-7 animate-spin text-[#0a1628] dark:text-slate-100" />
             </div>
           ) : (
-            <div className="overflow-y-auto">
-              {rooms.map((room) => {
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+              {filteredRooms.map((room) => {
                 const photos = roomImages(room);
                 const selected = editingId === room.id;
                 const live = todayStatusByRoom.get(room.id) ?? 'available';
@@ -328,7 +400,7 @@ export function RoomsTab() {
                   <div
                     key={room.id}
                     className={cn(
-                      'flex gap-3 border-b border-slate-50 px-3 py-3 dark:border-slate-800',
+                      'flex gap-3 border-b border-slate-50 px-3 py-3 [contain-intrinsic-size:auto_76px] [content-visibility:auto] dark:border-slate-800',
                       selected && 'bg-slate-50 dark:bg-slate-800/50',
                     )}
                   >
@@ -343,6 +415,8 @@ export function RoomsTab() {
                           <img
                             src={photos[0]}
                             alt={room.name}
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-cover"
                           />
                         ) : null}
@@ -405,9 +479,11 @@ export function RoomsTab() {
                   </div>
                 );
               })}
-              {rooms.length === 0 && (
+              {filteredRooms.length === 0 && (
                 <p className="px-4 py-10 text-center text-sm text-slate-500">
-                  No rooms yet. Use the form to add one.
+                  {rooms.length === 0
+                    ? 'No rooms yet. Use the form to add one.'
+                    : 'No rooms match your search.'}
                 </p>
               )}
             </div>
@@ -417,17 +493,25 @@ export function RoomsTab() {
         {/* Right: form */}
         <form
           onSubmit={saveRoom}
-          className="rounded-[13px] admin-hairline bg-white p-5 dark:bg-slate-900 xl:max-h-[calc(100dvh-10rem)] xl:overflow-y-auto"
+          className={cn(
+            'order-1 rounded-[13px] border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-white to-rose-50/60 p-5 dark:border-violet-900/40 dark:from-violet-950/25 dark:via-slate-900 dark:to-rose-950/20 xl:order-2 xl:block xl:max-h-[calc(100dvh-10rem)] xl:overflow-y-auto',
+            mobilePanel === 'form' ? 'block' : 'hidden',
+          )}
         >
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-[#0a1628] dark:text-slate-100">
-              {editingId ? 'Edit room' : 'Add room'}
-            </h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[11px] border border-violet-200/60 bg-white/70 p-3 shadow-sm shadow-violet-100/50 backdrop-blur-sm dark:border-violet-800/40 dark:bg-slate-900/70 dark:shadow-none">
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                <AdminIcon icon={adminIcons.rooms} width={17} height={17} />
+              </span>
+              <h2 className="text-lg font-bold text-[#0a1628] dark:text-slate-100">
+                {editingId ? 'Edit room' : 'Add room'}
+              </h2>
+            </div>
             {editingId && (
               <button
                 type="button"
                 onClick={resetForm}
-                className="text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                className="rounded-[8px] bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300"
               >
                 Cancel edit
               </button>
@@ -528,7 +612,7 @@ export function RoomsTab() {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="rounded-[11px] border border-sky-200/70 bg-sky-50/70 p-3 dark:border-sky-900/40 dark:bg-sky-950/20 sm:col-span-2">
               <FieldLabel icon={adminIcons.amenities}>
                 Amenities
                 {form.amenities.length > 0 && (
@@ -537,7 +621,7 @@ export function RoomsTab() {
                   </span>
                 )}
               </FieldLabel>
-              <div className="max-h-36 overflow-y-auto rounded-[9px] admin-hairline bg-slate-50/80 p-2 dark:bg-slate-950/50">
+              <div className="max-h-36 overflow-y-auto rounded-[9px] border border-sky-100 bg-white/80 p-2 dark:border-sky-900/30 dark:bg-slate-950/50">
                 <div className="flex flex-wrap gap-1.5">
                   {ROOM_AMENITIES.map((item) => {
                     const active = form.amenities.includes(item.label);
@@ -550,15 +634,15 @@ export function RoomsTab() {
                         className={cn(
                           'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
                           active
-                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                            : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300',
+                            ? 'bg-sky-600 text-white dark:bg-sky-400 dark:text-slate-950'
+                            : 'bg-sky-50 text-slate-600 hover:bg-sky-100 dark:bg-slate-800 dark:text-slate-300',
                         )}
                       >
                         <AdminIcon
                           icon={item.icon}
                           width={13}
                           height={13}
-                          className={active ? 'text-white dark:text-slate-900' : 'text-slate-400'}
+                          className={active ? 'text-white dark:text-slate-950' : 'text-sky-500'}
                         />
                         {item.label}
                       </button>
@@ -574,7 +658,7 @@ export function RoomsTab() {
                       key={label}
                       type="button"
                       onClick={() => toggleAmenity(label)}
-                      className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white dark:bg-white dark:text-slate-900"
+                      className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white dark:bg-sky-400 dark:text-slate-950"
                       title="Remove"
                     >
                       {label}
@@ -602,14 +686,14 @@ export function RoomsTab() {
                   type="button"
                   onClick={addCustomAmenity}
                   disabled={!customAmenity.trim()}
-                  className="shrink-0 rounded-[9px] bg-slate-100 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200"
+                  className="shrink-0 rounded-[9px] bg-sky-600 px-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50 dark:bg-sky-400 dark:text-slate-950"
                 >
                   Add
                 </button>
               </div>
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="rounded-[11px] border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20 sm:col-span-2">
               <FieldLabel icon={adminIcons.photo} htmlFor="room-photo">
                 Room photos
                 {form.image_urls.length > 0 && (
@@ -627,7 +711,7 @@ export function RoomsTab() {
                   void onImagesSelected(e.target.files);
                   e.target.value = '';
                 }}
-                className="w-full text-sm file:mr-3 file:rounded-[7px] file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-200"
+                className="w-full text-sm file:mr-3 file:rounded-[7px] file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-amber-800 hover:file:bg-amber-200 dark:file:bg-amber-950/60 dark:file:text-amber-300"
               />
               {uploading && <p className="mt-1 text-xs text-gray-500">Uploading…</p>}
               {form.image_urls.length > 0 && (
@@ -681,7 +765,7 @@ export function RoomsTab() {
               )}
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 sm:col-span-2">
+            <label className="flex items-center gap-2 rounded-[10px] border border-emerald-200/70 bg-emerald-50/70 px-3 py-2.5 text-sm font-medium text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 sm:col-span-2">
               <input
                 type="checkbox"
                 checked={form.is_active}
@@ -695,7 +779,7 @@ export function RoomsTab() {
           <button
             type="submit"
             disabled={saving || uploading}
-            className="mt-4 inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            className="mt-4 inline-flex items-center rounded-[9px] bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-violet-300/40 transition hover:from-violet-700 hover:to-indigo-700 disabled:opacity-60 dark:from-violet-400 dark:to-indigo-400 dark:text-slate-950 dark:shadow-none"
           >
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -35,11 +35,18 @@ create table if not exists public.event_bookings (
                   check (status in ('pending', 'confirmed', 'declined', 'cancelled', 'rescheduled')),
   amount        numeric(12,2) not null default 0,
   amount_paid   numeric(12,2) not null default 0,
+  payment_history jsonb not null default '[]'::jsonb,
   currency      text not null default 'PHP',
   notes         text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+
+alter table public.event_bookings
+  add column if not exists payment_history jsonb not null default '[]'::jsonb;
+
+comment on column public.event_bookings.payment_history is
+  'Installment payment entries containing id, amount, and paid_at';
 
 create index if not exists event_bookings_created_at_idx
   on public.event_bookings (created_at desc);
