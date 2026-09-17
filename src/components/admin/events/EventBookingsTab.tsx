@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Link2, Loader2, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, Link2, Loader2, Paperclip, Pencil, Plus, Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { logActivity } from '@/lib/admin/activity-log';
 import {
@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { EventBookingAttachmentsDialog } from '@/components/admin/events/EventBookingAttachmentsDialog';
 
 const STATUS_ACTIONS: { status: BookingStatus; label: string }[] = [
   { status: 'confirmed', label: 'Confirm' },
@@ -82,6 +83,8 @@ export function EventBookingsTab({
   const [filter, setFilter] = useState<'all' | BookingStatus>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<EventBookingSort>('newest');
+  const [editingBooking, setEditingBooking] = useState<EventBooking | null>(null);
+  const [attachmentBooking, setAttachmentBooking] = useState<EventBooking | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -319,6 +322,8 @@ export function EventBookingsTab({
                   updating={updatingId === booking.id}
                   onStatus={(status) => void updateStatus(booking, status)}
                   onSavePaid={(paid) => savePayment(booking, paid)}
+                  onEdit={() => setEditingBooking(booking)}
+                  onAttachments={() => setAttachmentBooking(booking)}
                 />
               ))}
               {filtered.length === 0 && (
@@ -350,6 +355,8 @@ export function EventBookingsTab({
                     updating={updatingId === booking.id}
                     onStatus={(status) => void updateStatus(booking, status)}
                     onSavePaid={(paid) => savePayment(booking, paid)}
+                    onEdit={() => setEditingBooking(booking)}
+                    onAttachments={() => setAttachmentBooking(booking)}
                   />
                 ))}
                 {filtered.length === 0 && (
@@ -365,6 +372,22 @@ export function EventBookingsTab({
           </>
         )}
       </div>
+      <EditEventBookingDialog
+        booking={editingBooking}
+        bookings={bookings}
+        offerings={offerings}
+        open={editingBooking != null}
+        onOpenChange={(next) => {
+          if (!next) setEditingBooking(null);
+        }}
+      />
+      <EventBookingAttachmentsDialog
+        booking={attachmentBooking}
+        open={attachmentBooking != null}
+        onOpenChange={(next) => {
+          if (!next) setAttachmentBooking(null);
+        }}
+      />
     </div>
   );
 }
@@ -375,12 +398,16 @@ function EventBookingCard({
   updating,
   onStatus,
   onSavePaid,
+  onEdit,
+  onAttachments,
 }: {
   booking: EventBooking;
   focused: boolean;
   updating: boolean;
   onStatus: (status: BookingStatus) => void;
   onSavePaid: (amount: number) => Promise<boolean>;
+  onEdit: () => void;
+  onAttachments: () => void;
 }) {
   const [paid, setPaid] = useState('');
   const unpaid = eventBookingUnpaid(booking);
@@ -492,6 +519,20 @@ function EventBookingCard({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onEdit}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Edit details
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onAttachments}>
+                <Paperclip className="mr-2 h-3.5 w-3.5" />
+                Attachments
+                {booking.attachment_urls.length > 0 && (
+                  <span className="ml-auto text-[10px] text-slate-400">
+                    {booking.attachment_urls.length}
+                  </span>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel>Status</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {STATUS_ACTIONS.map((action) => (
@@ -540,12 +581,16 @@ function EventBookingRow({
   updating,
   onStatus,
   onSavePaid,
+  onEdit,
+  onAttachments,
 }: {
   booking: EventBooking;
   focused: boolean;
   updating: boolean;
   onStatus: (status: BookingStatus) => void;
   onSavePaid: (amount: number) => Promise<boolean>;
+  onEdit: () => void;
+  onAttachments: () => void;
 }) {
   const [paid, setPaid] = useState('');
   const unpaid = eventBookingUnpaid(booking);
@@ -655,6 +700,20 @@ function EventBookingRow({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onEdit}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Edit details
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onAttachments}>
+              <Paperclip className="mr-2 h-3.5 w-3.5" />
+              Attachments
+              {booking.attachment_urls.length > 0 && (
+                <span className="ml-auto text-[10px] text-slate-400">
+                  {booking.attachment_urls.length}
+                </span>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuLabel>Status</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {STATUS_ACTIONS.map((action) => (
@@ -666,6 +725,316 @@ function EventBookingRow({
         </DropdownMenu>
       </td>
     </tr>
+  );
+}
+
+function EditEventBookingDialog({
+  booking,
+  bookings,
+  offerings,
+  open,
+  onOpenChange,
+}: {
+  booking: EventBooking | null;
+  bookings: EventBooking[];
+  offerings: EventOffering[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const invalidate = useInvalidateAdmin();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    offeringId: '',
+    name: '',
+    email: '',
+    phone: '',
+    guests: '1',
+    startDate: '',
+    endDate: '',
+    startTime: '',
+    endTime: '',
+    amount: '',
+    requests: '',
+    notes: '',
+  });
+
+  useEffect(() => {
+    if (!booking || !open) return;
+    setForm({
+      offeringId: booking.offering_id ?? '',
+      name: booking.name,
+      email: booking.email,
+      phone: booking.phone ?? '',
+      guests: String(booking.guests),
+      startDate: booking.event_date ?? '',
+      endDate: booking.event_end_date ?? booking.event_date ?? '',
+      startTime: booking.start_time ?? '',
+      endTime: booking.end_time ?? '',
+      amount: String(booking.amount),
+      requests: booking.requests ?? '',
+      notes: booking.notes ?? '',
+    });
+  }, [booking, open]);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!booking) return;
+    const selected = offerings.find((offering) => offering.id === form.offeringId);
+    if (!selected) {
+      toast.error('Choose an event area');
+      return;
+    }
+    const endDate = form.endDate || form.startDate;
+    if (!form.startDate || endDate < form.startDate) {
+      toast.error('Choose a valid event date range');
+      return;
+    }
+    if (
+      areaRangeConflicts(
+        bookings.filter((item) => item.id !== booking.id),
+        selected.id,
+        form.startDate,
+        endDate,
+      )
+    ) {
+      toast.error('That date range is already reserved for this area');
+      return;
+    }
+    const amount = Math.max(0, Number(form.amount) || 0);
+    if (amount < Number(booking.amount_paid)) {
+      toast.error('Price cannot be lower than the amount already paid', {
+        description: `${formatMoney(booking.amount_paid)} has already been paid.`,
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('event_bookings')
+        .update({
+          offering_id: selected.id,
+          event_title: selected.title,
+          event_date: form.startDate,
+          event_end_date: endDate,
+          start_time: form.startTime || null,
+          end_time: form.endTime || null,
+          name: form.name.trim(),
+          email: form.email.trim() || 'walk-in@aeyyyy.local',
+          phone: form.phone.trim() || null,
+          guests: Math.max(1, Number(form.guests) || 1),
+          amount,
+          requests: form.requests.trim() || null,
+          notes: form.notes.trim() || null,
+        })
+        .eq('id', booking.id);
+      if (error) throw error;
+
+      // Keep generated event income in the same accounting month as the event.
+      await supabase
+        .from('income')
+        .update({ income_date: form.startDate })
+        .ilike('title', `%${booking.booking_code}%`);
+
+      await logActivity({
+        action: 'updated',
+        entity: 'event_booking',
+        entityId: booking.id,
+        summary: `Edited event booking ${booking.booking_code}`,
+        details: {
+          area: selected.title,
+          event_date: form.startDate,
+          event_end_date: endDate,
+          amount,
+        },
+      });
+      await invalidate(['eventBookings', 'income', 'activity']);
+      toast.success('Event booking updated');
+      onOpenChange(false);
+    } catch (error) {
+      toast.error('Could not update event booking', {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editField =
+    'mt-1 w-full min-w-0 rounded-[9px] admin-hairline bg-white px-3 py-2 text-sm dark:bg-slate-950';
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+      <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit event booking</DialogTitle>
+          <DialogDescription>
+            Update guest, schedule, area, and pricing for {booking?.booking_code}.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(event) => void save(event)} className="space-y-3">
+          <label className="block text-[11px] font-semibold text-slate-500">
+            Event area
+            <select
+              required
+              value={form.offeringId}
+              onChange={(event) => setForm({ ...form, offeringId: event.target.value })}
+              className={editField}
+            >
+              <option value="">Choose an area</option>
+              {offerings.map((offering) => (
+                <option key={offering.id} value={offering.id}>
+                  {offering.title}
+                  {offering.availability === 'unavailable' ? ' (unavailable)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-semibold text-slate-500">
+              Guest name
+              <input
+                required
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                className={editField}
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-slate-500">
+              Guests
+              <input
+                required
+                type="number"
+                min={1}
+                value={form.guests}
+                onChange={(event) => setForm({ ...form, guests: event.target.value })}
+                className={editField}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="text-[11px] font-semibold text-slate-500">
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                className={editField}
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-slate-500">
+              Phone
+              <input
+                value={form.phone}
+                onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                className={editField}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-semibold text-slate-500">
+              From
+              <input
+                required
+                type="date"
+                value={form.startDate}
+                onChange={(event) => setForm({ ...form, startDate: event.target.value })}
+                className={editField}
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-slate-500">
+              Until
+              <input
+                type="date"
+                min={form.startDate || undefined}
+                value={form.endDate}
+                onChange={(event) => setForm({ ...form, endDate: event.target.value })}
+                className={editField}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-semibold text-slate-500">
+              Starts at
+              <input
+                type="time"
+                value={form.startTime}
+                onChange={(event) => setForm({ ...form, startTime: event.target.value })}
+                className={editField}
+              />
+            </label>
+            <label className="text-[11px] font-semibold text-slate-500">
+              Until time
+              <input
+                type="time"
+                value={form.endTime}
+                onChange={(event) => setForm({ ...form, endTime: event.target.value })}
+                className={editField}
+              />
+            </label>
+          </div>
+
+          <label className="block rounded-[10px] border border-violet-200 bg-violet-50 p-3 text-[11px] font-semibold text-violet-700 dark:border-violet-900 dark:bg-violet-950/20 dark:text-violet-300">
+            Total booking price
+            <input
+              required
+              type="number"
+              min={booking?.amount_paid ?? 0}
+              step="0.01"
+              value={form.amount}
+              onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              className={`${editField} text-slate-900 dark:text-slate-100`}
+            />
+            <span className="mt-1 block text-[10px] font-normal text-slate-500">
+              Already paid: {formatMoney(booking?.amount_paid ?? 0)}
+            </span>
+          </label>
+
+          <label className="block text-[11px] font-semibold text-slate-500">
+            Occasion / guest requests
+            <textarea
+              rows={2}
+              value={form.requests}
+              onChange={(event) => setForm({ ...form, requests: event.target.value })}
+              className={editField}
+            />
+          </label>
+          <label className="block text-[11px] font-semibold text-slate-500">
+            Internal notes
+            <textarea
+              rows={2}
+              value={form.notes}
+              onChange={(event) => setForm({ ...form, notes: event.target.value })}
+              className={editField}
+            />
+          </label>
+
+          <DialogFooter>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => onOpenChange(false)}
+              className="rounded-[9px] admin-hairline px-4 py-2 text-sm font-semibold text-slate-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center rounded-[9px] bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save changes
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -689,6 +1058,8 @@ function ManualEventReservation({
     endDate: '',
     startTime: '',
     endTime: '',
+    amountOverride: '',
+    priceMode: 'total' as 'total' | 'per_guest',
     amountPaid: '',
     status: 'confirmed' as Extract<BookingStatus, 'confirmed' | 'pending'>,
     notes: '',
@@ -696,7 +1067,14 @@ function ManualEventReservation({
 
   const selected = offerings.find((e) => e.id === form.offeringId) ?? offerings[0];
   const guests = Math.max(1, Number(form.guests) || 1);
-  const total = (selected?.price || 0) * guests;
+  const defaultTotal = (selected?.price || 0) * guests;
+  const customPrice = Math.max(0, Number(form.amountOverride) || 0);
+  const total =
+    form.amountOverride.trim() === ''
+      ? defaultTotal
+      : form.priceMode === 'per_guest'
+        ? customPrice * guests
+        : customPrice;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -788,6 +1166,8 @@ function ManualEventReservation({
         endDate: '',
         startTime: '',
         endTime: '',
+        amountOverride: '',
+        priceMode: 'total',
         amountPaid: '',
         status: 'confirmed',
         notes: '',
@@ -907,29 +1287,105 @@ function ManualEventReservation({
               className="rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
             />
           </div>
+          <div className="rounded-[10px] border border-violet-200/70 bg-violet-50/50 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-[8px] bg-violet-100/80 p-1 dark:bg-violet-950/50">
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, priceMode: 'total' })}
+                className={cn(
+                  'rounded-[6px] px-2 py-1.5 text-[10px] font-bold transition',
+                  form.priceMode === 'total'
+                    ? 'bg-white text-violet-800 shadow-sm dark:bg-slate-900 dark:text-violet-200'
+                    : 'text-violet-600 dark:text-violet-400',
+                )}
+              >
+                All guests / total
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, priceMode: 'per_guest' })}
+                className={cn(
+                  'rounded-[6px] px-2 py-1.5 text-[10px] font-bold transition',
+                  form.priceMode === 'per_guest'
+                    ? 'bg-white text-violet-800 shadow-sm dark:bg-slate-900 dark:text-violet-200'
+                    : 'text-violet-600 dark:text-violet-400',
+                )}
+              >
+                Price per guest
+              </button>
+            </div>
+            <div className="flex items-end gap-2">
+              <label className="min-w-0 flex-1 text-[11px] font-medium text-slate-500">
+                {form.priceMode === 'per_guest' ? 'Custom price per guest' : 'Custom booking total'}
+                <div className="relative mt-1">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                    {SYSTEM_CURRENCY === 'PHP' ? '₱' : SYSTEM_CURRENCY}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder={String(defaultTotal)}
+                    value={form.amountOverride}
+                    onChange={(e) => setForm({ ...form, amountOverride: e.target.value })}
+                    className="w-full rounded-[9px] admin-hairline bg-white py-2.5 pl-8 pr-3 text-sm dark:bg-slate-950"
+                  />
+                </div>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm({ ...form, amountOverride: '', priceMode: 'total' })
+                }
+                disabled={form.amountOverride === ''}
+                className="h-[41px] shrink-0 rounded-[8px] bg-violet-100 px-2.5 text-[10px] font-bold text-violet-700 disabled:opacity-40 dark:bg-violet-950/60 dark:text-violet-300"
+              >
+                Use default
+              </button>
+            </div>
+            <p className="mt-1.5 text-[10px] text-slate-500">
+              {form.amountOverride.trim() === ''
+                ? `Default: ${formatMoney(selected?.price || 0)} × ${guests} guest${
+                    guests === 1 ? '' : 's'
+                  } = ${formatMoney(defaultTotal)}.`
+                : form.priceMode === 'per_guest'
+                  ? `${formatMoney(customPrice)} × ${guests} guest${
+                      guests === 1 ? '' : 's'
+                    } = ${formatMoney(total)} total.`
+                  : `${formatMoney(total)} covers all ${guests} guest${
+                      guests === 1 ? '' : 's'
+                    }.`}
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder={`Paid (due ${formatMoney(total)})`}
-              value={form.amountPaid}
-              onChange={(e) => setForm({ ...form, amountPaid: e.target.value })}
-              className="rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-            />
-            <select
-              value={form.status}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  status: e.target.value as Extract<BookingStatus, 'confirmed' | 'pending'>,
-                })
-              }
-              className="rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-            >
-              <option value="confirmed">Confirmed</option>
-              <option value="pending">Pending</option>
-            </select>
+            <label className="text-[11px] font-medium text-slate-500">
+              Amount paid
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder={`Due ${formatMoney(total)}`}
+                value={form.amountPaid}
+                onChange={(e) => setForm({ ...form, amountPaid: e.target.value })}
+                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+              />
+            </label>
+            <label className="text-[11px] font-medium text-slate-500">
+              Status
+              <select
+                value={form.status}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    status: e.target.value as Extract<BookingStatus, 'confirmed' | 'pending'>,
+                  })
+                }
+                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+              >
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+              </select>
+            </label>
           </div>
           <input
             placeholder="Occasion / notes"

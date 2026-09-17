@@ -25,6 +25,7 @@ export type EventBooking = {
   amount: number;
   amount_paid: number;
   payment_history: EventPaymentEntry[];
+  attachment_urls: string[];
   currency: string;
   notes: string | null;
   linked_room_booking_id: string | null;
@@ -111,6 +112,11 @@ export function normalizeEventBooking(
     amount: Number(row.amount) || 0,
     amount_paid: Number(row.amount_paid) || 0,
     payment_history: paymentHistory,
+    attachment_urls: Array.isArray(row.attachment_urls)
+      ? row.attachment_urls.filter(
+          (value): value is string => typeof value === 'string' && Boolean(value),
+        )
+      : [],
     currency: String(row.currency ?? 'PHP'),
     notes: (row.notes as string | null) ?? null,
     linked_room_booking_id: row.linked_room_booking_id

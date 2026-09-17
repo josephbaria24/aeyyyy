@@ -36,6 +36,7 @@ create table if not exists public.event_bookings (
   amount        numeric(12,2) not null default 0,
   amount_paid   numeric(12,2) not null default 0,
   payment_history jsonb not null default '[]'::jsonb,
+  attachment_urls text[] not null default '{}',
   currency      text not null default 'PHP',
   notes         text,
   created_at    timestamptz not null default now(),
@@ -43,7 +44,8 @@ create table if not exists public.event_bookings (
 );
 
 alter table public.event_bookings
-  add column if not exists payment_history jsonb not null default '[]'::jsonb;
+  add column if not exists payment_history jsonb not null default '[]'::jsonb,
+  add column if not exists attachment_urls text[] not null default '{}';
 
 comment on column public.event_bookings.payment_history is
   'Installment payment entries containing id, amount, and paid_at';
