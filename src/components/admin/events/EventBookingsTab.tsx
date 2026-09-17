@@ -1184,6 +1184,9 @@ function ManualEventReservation({
     }
   };
 
+  const compactField =
+    'mt-1 h-9 w-full min-w-0 rounded-[8px] border border-slate-200 bg-white px-2.5 text-xs text-slate-800 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-amber-950';
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -1195,26 +1198,36 @@ function ManualEventReservation({
           Walk-in
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Walk-in event reservation</DialogTitle>
-          <DialogDescription>Add a guest who reserved an area in person.</DialogDescription>
+      <DialogContent className="max-w-md gap-0 overflow-y-auto p-0">
+        <DialogHeader className="border-b border-amber-200 bg-gradient-to-r from-amber-100/90 via-orange-50 to-teal-50 px-4 py-3 text-left dark:border-amber-900/40 dark:from-amber-950/35 dark:via-orange-950/20 dark:to-teal-950/30 sm:px-5">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#0b3b3c] text-amber-100 shadow-sm">
+              <Plus className="h-4 w-4" />
+            </span>
+            Walk-in event reservation
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Add a guest who reserved an area in person.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={(e) => void submit(e)} className="space-y-3">
-          <select
-            required
-            value={form.offeringId || selected?.id || ''}
-            onChange={(e) => setForm({ ...form, offeringId: e.target.value })}
-            className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-          >
-            {offerings.length === 0 && <option value="">No event areas</option>}
-            {offerings.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-                {item.availability === 'unavailable' ? ' (unavailable)' : ''}
-              </option>
-            ))}
-          </select>
+        <form onSubmit={(e) => void submit(e)} className="space-y-2.5 px-4 py-3 sm:px-5 sm:py-4">
+          <label className="block rounded-[9px] border border-teal-200 bg-teal-50/70 p-2.5 text-[10px] font-bold uppercase tracking-wide text-teal-800 dark:border-teal-900/50 dark:bg-teal-950/25 dark:text-teal-200">
+            Event area
+            <select
+              required
+              value={form.offeringId || selected?.id || ''}
+              onChange={(e) => setForm({ ...form, offeringId: e.target.value })}
+              className={`${compactField} border-teal-200 font-semibold dark:border-teal-900`}
+            >
+              {offerings.length === 0 && <option value="">No event areas</option>}
+              {offerings.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                  {item.availability === 'unavailable' ? ' (unavailable)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="text-[11px] font-medium text-slate-500">
               From
@@ -1223,7 +1236,7 @@ function ManualEventReservation({
                 type="date"
                 value={form.startDate}
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               />
             </label>
             <label className="text-[11px] font-medium text-slate-500">
@@ -1233,7 +1246,7 @@ function ManualEventReservation({
                 min={form.startDate || undefined}
                 value={form.endDate}
                 onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               />
             </label>
           </div>
@@ -1244,7 +1257,7 @@ function ManualEventReservation({
                 type="time"
                 value={form.startTime}
                 onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               />
             </label>
             <label className="text-[11px] font-medium text-slate-500">
@@ -1253,50 +1266,68 @@ function ManualEventReservation({
                 type="time"
                 value={form.endTime}
                 onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               />
             </label>
           </div>
-          <input
-            required
-            placeholder="Guest name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              placeholder="Phone"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-            />
-            <input
-              type="number"
-              min={1}
-              placeholder="Guests"
-              value={form.guests}
-              onChange={(e) => setForm({ ...form, guests: e.target.value })}
-              className="rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-            />
+          <div className="rounded-[9px] border border-amber-200/70 bg-[#fff8e8] p-2.5 dark:border-amber-900/40 dark:bg-amber-950/15">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              Guest details
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[11px] font-medium text-slate-500">
+                Guest name
+                <input
+                  required
+                  placeholder="Full name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className={compactField}
+                />
+              </label>
+              <label className="text-[11px] font-medium text-slate-500">
+                Number of guests
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  placeholder="1"
+                  value={form.guests}
+                  onChange={(e) => setForm({ ...form, guests: e.target.value })}
+                  className={compactField}
+                />
+              </label>
+              <label className="text-[11px] font-medium text-slate-500">
+                Phone
+                <input
+                  placeholder="Contact number"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className={compactField}
+                />
+              </label>
+              <label className="text-[11px] font-medium text-slate-500">
+                Email
+                <input
+                  type="email"
+                  placeholder="Optional"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className={compactField}
+                />
+              </label>
+            </div>
           </div>
-          <div className="rounded-[10px] border border-violet-200/70 bg-violet-50/50 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
-            <div className="mb-2 grid grid-cols-2 gap-1 rounded-[8px] bg-violet-100/80 p-1 dark:bg-violet-950/50">
+          <div className="rounded-[10px] border border-orange-200/80 bg-orange-50/60 p-2.5 dark:border-orange-900/50 dark:bg-orange-950/20">
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-[8px] bg-amber-100/90 p-1 dark:bg-amber-950/50">
               <button
                 type="button"
                 onClick={() => setForm({ ...form, priceMode: 'total' })}
                 className={cn(
                   'rounded-[6px] px-2 py-1.5 text-[10px] font-bold transition',
                   form.priceMode === 'total'
-                    ? 'bg-white text-violet-800 shadow-sm dark:bg-slate-900 dark:text-violet-200'
-                    : 'text-violet-600 dark:text-violet-400',
+                    ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                    : 'text-amber-800 dark:text-amber-400',
                 )}
               >
                 All guests / total
@@ -1307,8 +1338,8 @@ function ManualEventReservation({
                 className={cn(
                   'rounded-[6px] px-2 py-1.5 text-[10px] font-bold transition',
                   form.priceMode === 'per_guest'
-                    ? 'bg-white text-violet-800 shadow-sm dark:bg-slate-900 dark:text-violet-200'
-                    : 'text-violet-600 dark:text-violet-400',
+                    ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                    : 'text-amber-800 dark:text-amber-400',
                 )}
               >
                 Price per guest
@@ -1328,7 +1359,7 @@ function ManualEventReservation({
                     placeholder={String(defaultTotal)}
                     value={form.amountOverride}
                     onChange={(e) => setForm({ ...form, amountOverride: e.target.value })}
-                    className="w-full rounded-[9px] admin-hairline bg-white py-2.5 pl-8 pr-3 text-sm dark:bg-slate-950"
+                    className="h-9 w-full rounded-[8px] border border-amber-300 bg-white pl-8 pr-2.5 text-xs outline-none focus:ring-2 focus:ring-amber-100 dark:border-amber-900 dark:bg-slate-950"
                   />
                 </div>
               </label>
@@ -1338,7 +1369,7 @@ function ManualEventReservation({
                   setForm({ ...form, amountOverride: '', priceMode: 'total' })
                 }
                 disabled={form.amountOverride === ''}
-                className="h-[41px] shrink-0 rounded-[8px] bg-violet-100 px-2.5 text-[10px] font-bold text-violet-700 disabled:opacity-40 dark:bg-violet-950/60 dark:text-violet-300"
+                className="h-9 shrink-0 rounded-[8px] bg-amber-200/80 px-2.5 text-[10px] font-bold text-amber-900 disabled:opacity-40 dark:bg-amber-950/60 dark:text-amber-300"
               >
                 Use default
               </button>
@@ -1367,7 +1398,7 @@ function ManualEventReservation({
                 placeholder={`Due ${formatMoney(total)}`}
                 value={form.amountPaid}
                 onChange={(e) => setForm({ ...form, amountPaid: e.target.value })}
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               />
             </label>
             <label className="text-[11px] font-medium text-slate-500">
@@ -1380,24 +1411,27 @@ function ManualEventReservation({
                     status: e.target.value as Extract<BookingStatus, 'confirmed' | 'pending'>,
                   })
                 }
-                className="mt-1 w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
+                className={compactField}
               >
                 <option value="confirmed">Confirmed</option>
                 <option value="pending">Pending</option>
               </select>
             </label>
           </div>
-          <input
-            placeholder="Occasion / notes"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            className="w-full rounded-[9px] admin-hairline px-3 py-2.5 text-sm dark:bg-slate-950"
-          />
-          <DialogFooter>
+          <label className="block text-[11px] font-medium text-slate-500">
+            Occasion / notes
+            <input
+              placeholder="Birthday, gathering, special request…"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className={compactField}
+            />
+          </label>
+          <DialogFooter className="border-t border-slate-100 pt-3 dark:border-slate-800">
             <button
               type="submit"
               disabled={saving || offerings.length === 0}
-              className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+              className="inline-flex h-9 items-center justify-center rounded-[8px] bg-gradient-to-r from-[#0b3b3c] to-[#176b69] px-4 text-xs font-bold text-amber-50 shadow-sm hover:from-[#082f30] hover:to-[#125755] disabled:opacity-50"
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Save reservation
