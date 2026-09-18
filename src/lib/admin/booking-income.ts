@@ -46,6 +46,7 @@ export async function syncBookingIncome(
   const difference = money(target - recorded);
 
   if (difference > 0) {
+    const guestTotal = (Number(booking.adults) || 0) + (Number(booking.children) || 0);
     const { error: insertError } = await supabase.from('income').insert({
       title: `Booking ${booking.booking_code} — ${booking.name}`,
       category: 'booking',
@@ -54,7 +55,7 @@ export async function syncBookingIncome(
       // Attribute booking revenue to the stay month, not the date it was entered.
       income_date: booking.check_in || todayIsoLocal(),
       booking_id: booking.id,
-      notes: `${booking.destination} (${booking.check_in} to ${booking.check_out}) · cumulative payment ${target} / due ${bookingGrandTotal(booking)}`,
+      notes: `${booking.destination} (${booking.check_in} to ${booking.check_out}) · ${guestTotal} guest${guestTotal === 1 ? '' : 's'} · cumulative payment ${target} / due ${bookingGrandTotal(booking)}`,
     });
     if (insertError) throw insertError;
     return { changed: true, difference };

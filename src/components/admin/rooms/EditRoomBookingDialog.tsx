@@ -1,27 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ImagePlus, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useInvalidateAdmin } from '@/lib/admin/queries';
+import { logActivity } from '@/lib/admin/activity-log';
 import {
   calculateStayAmount,
   formatMoney,
   nightsBetween,
-  SYSTEM_CURRENCY,
   SYSTEM_CURRENCY_SYMBOL,
 } from '@/lib/money';
-import {
-  getStayAvailability,
-  todayIsoLocal,
-} from '@/lib/room-status';
+import { getStayAvailability } from '@/lib/room-status';
 import {
   bookingGrandTotal,
   newChargeId,
   otherChargesTotal,
   type Booking,
   type BookingCharge,
-  type BookingStatus,
 } from '@/lib/types/booking';
 import type { Room } from '@/lib/types/room';
 import {
@@ -31,13 +27,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { logActivity } from '@/lib/admin/activity-log';
-import { uploadToCloudinary } from '@/lib/upload';
 
-type ManualForm = {
+const fieldClass =
+  'w-full rounded-[9px] admin-hairline bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-accent/25 dark:bg-slate-950 dark:text-slate-100';
+
+type EditForm = {
   name: string;
   email: string;
   phone: string;
@@ -48,37 +44,9 @@ type ManualForm = {
   children: string;
   rate: string;
   amountPaid: string;
-  status: Extract<BookingStatus, 'confirmed' | 'pending'>;
   requests: string;
   notes: string;
 };
-
-function initialForm(room?: Room): ManualForm {
-  return {
-    name: '',
-    email: '',
-    phone: '',
-    destination: room?.name ?? '',
-    checkIn: todayIsoLocal(),
-    checkOut: '',
-    adults: '1',
-    children: '0',
-    rate: room ? String(room.price_per_night) : '',
-    amountPaid: '0',
-    status: 'confirmed',
-    requests: '',
-    notes: 'Walk-in reservation',
-  };
-}
-
-function walkInCode() {
-  const time = Date.now().toString(36).toUpperCase().slice(-6);
-  const random = Math.random().toString(36).toUpperCase().slice(2, 5);
-  return `WI${time}${random}`;
-}
-
-const fieldClass =
-  'w-full rounded-[9px] admin-hairline bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-accent/25 dark:bg-slate-950 dark:text-slate-100';
 
 function FieldLabel({
   label,
@@ -99,29 +67,55 @@ function FieldLabel({
   );
 }
 
-export function ManualReservationDialog({
-  rooms,
+export function EditRoomBookingDialog({
+  booking,
   bookings,
+  rooms,
+  open,
+  onOpenChange,
 }: {
-  rooms: Room[];
+  booking: Booking | null;
   bookings: Booking[];
+  rooms: Room[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const invalidate = useInvalidateAdmin();
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploadingEvidence, setUploadingEvidence] = useState(false);
-  const [evidenceUrls, setEvidenceUrls] = useState<string[]>([]);
   const [otherCharges, setOtherCharges] = useState<BookingCharge[]>([]);
-  const [form, setForm] = useState<ManualForm>(() => initialForm(rooms[0]));
+  const [form, setForm] = useState<EditForm>({
+    name: '',
+    email: '',
+    phone: '',
+    destination: '',
+    checkIn: '',
+    checkOut: '',
+    adults: '1',
+    children: '0',
+    rate: '',
+    amountPaid: '0',
+    requests: '',
+    notes: '',
+  });
 
   useEffect(() => {
-    if (form.destination || rooms.length === 0) return;
-    setForm((prev) => ({
-      ...prev,
-      destination: rooms[0].name,
-      rate: String(rooms[0].price_per_night),
-    }));
-  }, [form.destination, rooms]);
+    if (!booking || !open) return;
+    setForm({
+      name: booking.name,
+      email: booking.email,
+      phone: booking.phone ?? '',
+      destination: booking.destination,
+      checkIn: booking.check_in,
+      checkOut: booking.check_out,
+      adults: String(booking.adults),
+      children: String(booking.children),
+      rate: String(booking.rate_per_night),
+      amountPaid: String(booking.amount_paid),
+      requests: booking.requests ?? '',
+      notes: booking.notes ?? '',
+    });
+    setOtherCharges(booking.other_charges.map((charge) => ({ ...charge })));
+  }, [booking, open]);
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.name === form.destination) ?? null,
@@ -131,23 +125,18 @@ export function ManualReservationDialog({
   const confirmedStays = useMemo(
     () =>
       bookings
-        .filter((booking) => booking.status === 'confirmed')
-        .map((booking) => ({
-          destination: booking.destination,
-          check_in: booking.check_in,
-          check_out: booking.check_out,
+        .filter((item) => item.status === 'confirmed' && item.id !== booking?.id)
+        .map((item) => ({
+          destination: item.destination,
+          check_in: item.check_in,
+          check_out: item.check_out,
         })),
-    [bookings],
+    [bookings, booking?.id],
   );
 
   const availability = useMemo(
     () =>
-      getStayAvailability(
-        selectedRoom,
-        confirmedStays,
-        form.checkIn,
-        form.checkOut,
-      ),
+      getStayAvailability(selectedRoom, confirmedStays, form.checkIn, form.checkOut),
     [confirmedStays, form.checkIn, form.checkOut, selectedRoom],
   );
 
@@ -155,12 +144,10 @@ export function ManualReservationDialog({
   const rate = Number(form.rate) || 0;
   const stayTotal = calculateStayAmount(rate, form.checkIn, form.checkOut, 1);
   const extrasTotal = otherChargesTotal(otherCharges);
-  const total = bookingGrandTotal({ amount: stayTotal, other_charges: otherCharges });
+  const dueTotal = bookingGrandTotal({ amount: stayTotal, other_charges: otherCharges });
   const paid = Math.max(0, Number(form.amountPaid) || 0);
-  const invalidDates = Boolean(form.checkOut) && nights < 1;
-  const blocked = availability.kind !== 'open';
 
-  const set = (key: keyof ManualForm, value: string) => {
+  const set = (key: keyof EditForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -171,12 +158,6 @@ export function ManualReservationDialog({
       destination: name,
       rate: room ? String(room.price_per_night) : prev.rate,
     }));
-  };
-
-  const reset = () => {
-    setForm(initialForm(rooms[0]));
-    setEvidenceUrls([]);
-    setOtherCharges([]);
   };
 
   const addCharge = () => {
@@ -193,43 +174,14 @@ export function ManualReservationDialog({
     setOtherCharges((current) => current.filter((charge) => charge.id !== id));
   };
 
-  const uploadEvidence = async (files: FileList | null) => {
-    if (!files?.length) return;
-    const selected = Array.from(files).filter((file) => file.type.startsWith('image/'));
-    if (!selected.length) {
-      toast.error('Choose an image or screenshot');
-      return;
-    }
-    if (evidenceUrls.length + selected.length > 10) {
-      toast.error('A booking can have up to 10 attachments');
-      return;
-    }
-
-    setUploadingEvidence(true);
-    try {
-      const uploaded: string[] = [];
-      for (const file of selected) {
-        const asset = await uploadToCloudinary(file, 'aeyyyy/booking-evidence');
-        uploaded.push(asset.secure_url);
-      }
-      setEvidenceUrls((current) => [...current, ...uploaded]);
-      toast.success(`${uploaded.length} attachment${uploaded.length === 1 ? '' : 's'} ready`);
-    } catch (error) {
-      toast.error('Could not upload attachments', {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setUploadingEvidence(false);
-    }
-  };
-
-  const submit = async (event: React.FormEvent) => {
+  const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedRoom) {
+    if (!booking) return;
+    if (!form.destination.trim()) {
       toast.error('Choose a room');
       return;
     }
-    if (invalidDates || nights < 1) {
+    if (!form.checkIn || !form.checkOut || nights < 1) {
       toast.error('Check-out must be after check-in');
       return;
     }
@@ -255,71 +207,51 @@ export function ManualReservationDialog({
       return;
     }
 
+    if (paid > dueTotal) {
+      toast.error('Amount paid cannot exceed the due total', {
+        description: `Due is ${formatMoney(dueTotal)}.`,
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const supabase = createClient();
-      const code = walkInCode();
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from('bookings')
-        .insert({
-          booking_code: code,
+        .update({
           name: form.name.trim(),
-          email: form.email.trim(),
+          email: form.email.trim() || 'walk-in@aeyyyy.local',
           phone: form.phone.trim() || null,
-          destination: selectedRoom.name,
+          destination: form.destination.trim(),
           check_in: form.checkIn,
           check_out: form.checkOut,
           adults: Math.max(1, Number(form.adults) || 1),
           children: Math.max(0, Number(form.children) || 0),
-          rooms: 1,
-          requests: form.requests.trim() || null,
-          status: form.status,
           rate_per_night: rate,
           amount: stayTotal,
           amount_paid: paid,
           other_charges: cleanedCharges,
-          evidence_urls: evidenceUrls,
-          currency: SYSTEM_CURRENCY,
-          notes: form.notes.trim() || 'Walk-in reservation',
+          requests: form.requests.trim() || null,
+          notes: form.notes.trim() || null,
         })
-        .select('id, booking_code')
-        .single();
+        .eq('id', booking.id);
       if (error) throw error;
 
-      let incomeWarning = '';
-      if (paid > 0 && inserted) {
-        const guestTotal =
-          Math.max(1, Number(form.adults) || 1) + Math.max(0, Number(form.children) || 0);
-        const { error: incomeError } = await supabase.from('income').insert({
-          title: `Walk-in ${inserted.booking_code} — ${form.name.trim()}`,
-          category: 'booking',
-          amount: paid,
-          currency: SYSTEM_CURRENCY,
-          income_date: form.checkIn,
-          booking_id: inserted.id,
-          notes: `${selectedRoom.name} (${form.checkIn} to ${form.checkOut}) · ${guestTotal} guest${guestTotal === 1 ? '' : 's'}`,
-        });
-        if (incomeError) incomeWarning = ' Payment was saved, but income could not be recorded.';
-      }
-
       await logActivity({
-        action: 'created',
+        action: 'updated',
         entity: 'booking',
-        entityId: inserted?.id,
-        summary: `Added walk-in booking ${inserted?.booking_code} for ${selectedRoom.name}`,
+        entityId: booking.id,
+        summary: `Edited booking ${booking.booking_code} details`,
       });
-      await invalidate(paid > 0 ? ['bookings', 'income', 'activity'] : ['bookings', 'activity']);
-      toast.success('Walk-in reservation created', {
-        description: `${inserted.booking_code} · ${form.name.trim()} · ${selectedRoom.name}${incomeWarning}`,
+      await invalidate(['bookings', 'activity']);
+      toast.success('Booking updated', {
+        description: `${booking.booking_code} · ${form.name.trim()}`,
       });
-      setOpen(false);
-      reset();
-    } catch (error) {
-      toast.error('Could not create reservation', {
-        description:
-          error instanceof Error
-            ? `${error.message} — run supabase/booking-evidence.sql if the evidence column is missing.`
-            : 'Insert failed',
+      onOpenChange(false);
+    } catch (err) {
+      toast.error('Could not update booking', {
+        description: err instanceof Error ? err.message : undefined,
       });
     } finally {
       setSaving(false);
@@ -327,35 +259,18 @@ export function ManualReservationDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!saving && !uploadingEvidence) {
-          setOpen(next);
-          if (!next) reset();
-        }
-      }}
-    >
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-[9px] bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-        >
-          <Plus className="h-4 w-4" />
-          Add walk-in
-        </button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="max-w-2xl dark:border-slate-800 dark:bg-slate-900">
         <DialogHeader>
-          <DialogTitle>New walk-in reservation</DialogTitle>
+          <DialogTitle>Edit reservation</DialogTitle>
           <DialogDescription>
-            Record a reservation received in person or by phone. Confirmed stays immediately
-            affect room availability.
+            {booking
+              ? `Update guest, room, dates, and charges for ${booking.booking_code}.`
+              : 'Update booking details.'}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={(event) => void submit(event)} className="space-y-5">
+        <form onSubmit={(event) => void save(event)} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <FieldLabel label="Guest name">
               <input
@@ -363,7 +278,6 @@ export function ManualReservationDialog({
                 value={form.name}
                 onChange={(event) => set('name', event.target.value)}
                 className={fieldClass}
-                placeholder="Full name"
               />
             </FieldLabel>
             <FieldLabel label="Phone">
@@ -371,16 +285,14 @@ export function ManualReservationDialog({
                 value={form.phone}
                 onChange={(event) => set('phone', event.target.value)}
                 className={fieldClass}
-                placeholder="Contact number"
               />
             </FieldLabel>
-            <FieldLabel label="Email (optional)">
+            <FieldLabel label="Email">
               <input
                 type="email"
                 value={form.email}
                 onChange={(event) => set('email', event.target.value)}
                 className={fieldClass}
-                placeholder="guest@email.com"
               />
             </FieldLabel>
             <FieldLabel label="Room">
@@ -397,6 +309,10 @@ export function ManualReservationDialog({
                     {room.availability === 'unavailable' ? ' — unavailable' : ''}
                   </option>
                 ))}
+                {form.destination &&
+                  !rooms.some((room) => room.name === form.destination) && (
+                    <option value={form.destination}>{form.destination}</option>
+                  )}
               </select>
             </FieldLabel>
             <FieldLabel label="Check-in">
@@ -458,6 +374,7 @@ export function ManualReservationDialog({
                 className={fieldClass}
               />
             </FieldLabel>
+
             <div className="space-y-2 rounded-[11px] border border-amber-200/70 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20 sm:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -465,7 +382,7 @@ export function ManualReservationDialog({
                     Other charges
                   </p>
                   <p className="text-[10px] text-slate-500">
-                    Extra fees (minibar, damages, late checkout, etc.) — type what each is for.
+                    Extra fees — type what each charge is for.
                   </p>
                 </div>
                 <button
@@ -478,7 +395,7 @@ export function ManualReservationDialog({
                 </button>
               </div>
               {otherCharges.length === 0 ? (
-                <p className="text-[11px] text-slate-500">No extra charges yet.</p>
+                <p className="text-[11px] text-slate-500">No extra charges.</p>
               ) : (
                 <div className="space-y-2">
                   {otherCharges.map((charge) => (
@@ -509,7 +426,6 @@ export function ManualReservationDialog({
                               amount: Math.max(0, Number(event.target.value) || 0),
                             })
                           }
-                          placeholder="0"
                           className={`${fieldClass} pl-7`}
                         />
                       </div>
@@ -526,33 +442,22 @@ export function ManualReservationDialog({
                 </div>
               )}
             </div>
-            <FieldLabel label="Reservation status">
-              <select
-                value={form.status}
-                onChange={(event) =>
-                  set('status', event.target.value as ManualForm['status'])
-                }
-                className={fieldClass}
-              >
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-              </select>
-            </FieldLabel>
-            <div className="rounded-[9px] bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800">
+
+            <div className="rounded-[9px] bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800 sm:col-span-2">
               <p className="text-xs font-semibold text-slate-500">Due total</p>
               <p className="mt-1 font-bold text-slate-900 dark:text-slate-100">
                 {nights > 0
-                  ? `${formatMoney(total)}${extrasTotal > 0 ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}` : ''} · ${nights} night${nights === 1 ? '' : 's'}`
+                  ? `${formatMoney(dueTotal)}${extrasTotal > 0 ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}` : ''} · ${nights} night${nights === 1 ? '' : 's'}`
                   : 'Select valid dates'}
               </p>
             </div>
+
             <FieldLabel label="Special requests" wide>
               <textarea
                 rows={2}
                 value={form.requests}
                 onChange={(event) => set('requests', event.target.value)}
                 className={fieldClass}
-                placeholder="Guest requests or preferences"
               />
             </FieldLabel>
             <FieldLabel label="Internal notes" wide>
@@ -561,67 +466,8 @@ export function ManualReservationDialog({
                 value={form.notes}
                 onChange={(event) => set('notes', event.target.value)}
                 className={fieldClass}
-                placeholder="Visible to admins only"
               />
             </FieldLabel>
-
-            <div className="space-y-2 rounded-[11px] border border-sky-200/70 bg-sky-50/60 p-3 dark:border-sky-900/50 dark:bg-sky-950/20 sm:col-span-2">
-              <div className="flex items-center gap-2">
-                <ImagePlus className="h-4 w-4 text-sky-600" />
-                <div>
-                  <p className="text-xs font-bold text-sky-800 dark:text-sky-200">
-                    Booking attachments
-                  </p>
-                  <p className="text-[10px] text-slate-500">
-                    Add Booking.com screenshots or other proof. Admin-only.
-                  </p>
-                </div>
-              </div>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-[8px] bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700">
-                {uploadingEvidence ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Upload className="h-3.5 w-3.5" />
-                )}
-                {uploadingEvidence ? 'Uploading…' : 'Upload screenshots'}
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  disabled={uploadingEvidence}
-                  className="hidden"
-                  onChange={(event) => {
-                    const files = event.target.files;
-                    event.target.value = '';
-                    void uploadEvidence(files);
-                  }}
-                />
-              </label>
-              {evidenceUrls.length > 0 && (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                  {evidenceUrls.map((url, index) => (
-                    <div key={`${url}-${index}`} className="group relative overflow-hidden rounded-[8px]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`Evidence ${index + 1}`}
-                        className="aspect-square w-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEvidenceUrls((current) => current.filter((item) => item !== url))
-                        }
-                        className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white"
-                        aria-label={`Remove evidence ${index + 1}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           {availability.kind === 'unavailable' && (
@@ -639,7 +485,7 @@ export function ManualReservationDialog({
           <DialogFooter>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange(false)}
               disabled={saving}
               className="rounded-[9px] admin-hairline px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
             >
@@ -647,11 +493,16 @@ export function ManualReservationDialog({
             </button>
             <button
               type="submit"
-              disabled={saving || uploadingEvidence || blocked || invalidDates || rooms.length === 0}
+              disabled={
+                saving ||
+                nights < 1 ||
+                availability.kind === 'unavailable' ||
+                availability.kind === 'conflict'
+              }
               className="inline-flex items-center justify-center gap-2 rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Saving…' : 'Create reservation'}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </DialogFooter>
         </form>

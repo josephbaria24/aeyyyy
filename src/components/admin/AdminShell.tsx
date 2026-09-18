@@ -7,9 +7,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createClient } from '@/lib/supabase/client';
-import { prefetchAdminRoute, useBookings, useEventBookings } from '@/lib/admin/queries';
+import { prefetchAdminRoute, useBookings, useEventBookings, useOfferings } from '@/lib/admin/queries';
 import { adminRoomsHref, parseRoomsHubTab, type RoomsHubTab } from '@/lib/admin/rooms-hub';
 import { adminEventsHref, parseEventsHubTab, type EventsHubTab } from '@/lib/admin/events-hub';
+import { adminPoolHref } from '@/lib/admin/pool-hub';
 import { cn } from '@/lib/utils';
 import { AdminIcon, adminIcons } from '@/components/admin/AdminIcon';
 import { AdminNotifications } from '@/components/admin/AdminNotifications';
@@ -31,8 +32,10 @@ type NavLeaf = {
   icon: string;
 };
 
+type NavGroupId = 'rooms' | 'events' | 'pool';
+
 type NavGroup = {
-  id: 'rooms' | 'events';
+  id: NavGroupId;
   label: string;
   short: string;
   icon: string;
@@ -100,6 +103,39 @@ const topNav: (NavLeaf | NavGroup)[] = [
       { tab: 'areas', label: 'Areas', href: adminEventsHref('areas'), icon: adminIcons.areas },
     ],
   },
+  {
+    id: 'pool',
+    label: 'Pool',
+    short: 'Pool',
+    icon: adminIcons.pool,
+    href: '/admin/pool-bookings',
+    children: [
+      {
+        tab: 'bookings',
+        label: 'Bookings',
+        href: adminPoolHref('bookings'),
+        icon: adminIcons.bookings,
+      },
+      {
+        tab: 'status',
+        label: 'Status',
+        href: adminPoolHref('status'),
+        icon: adminIcons.pending,
+      },
+      {
+        tab: 'calendar',
+        label: 'Calendar',
+        href: adminPoolHref('calendar'),
+        icon: adminIcons.calendar,
+      },
+      {
+        tab: 'areas',
+        label: 'Packages',
+        href: adminPoolHref('areas'),
+        icon: adminIcons.areas,
+      },
+    ],
+  },
   { href: '/admin/accounting', label: 'Accounting', short: 'Ledger', icon: adminIcons.accounting },
   { href: '/admin/users', label: 'Users', short: 'Users', icon: adminIcons.staff },
   { href: '/admin/reports', label: 'Reports', short: 'Reports', icon: adminIcons.reports },
@@ -118,10 +154,15 @@ function isEventsHubPath(pathname: string) {
   return pathname.startsWith('/admin/event-bookings');
 }
 
+function isPoolHubPath(pathname: string) {
+  return pathname.startsWith('/admin/pool-bookings');
+}
+
 function titleFromPath(
   pathname: string,
   roomsTab: RoomsHubTab | null,
   eventsTab: EventsHubTab | null,
+  poolTab: EventsHubTab | null,
 ) {
   if (isRoomsHubPath(pathname)) {
     if (roomsTab === 'bookings') return 'Bookings';
@@ -135,6 +176,12 @@ function titleFromPath(
     if (eventsTab === 'calendar') return 'Event calendar';
     if (eventsTab === 'areas') return 'Event areas';
     return 'Event bookings';
+  }
+  if (isPoolHubPath(pathname)) {
+    if (poolTab === 'status') return 'Pool availability';
+    if (poolTab === 'calendar') return 'Pool calendar';
+    if (poolTab === 'areas') return 'Pool packages';
+    return 'Pool bookings';
   }
   if (pathname.startsWith('/admin/content')) return 'Content';
   if (pathname.startsWith('/admin/accounting')) return 'Accounting';
@@ -192,8 +239,10 @@ function SidebarMenu({
   pathname,
   roomsTab,
   eventsTab,
+  poolTab,
   pendingBookings,
   pendingEventBookings,
+  pendingPoolBookings,
   onLogout,
   onPrefetch,
   onNavigate,
@@ -201,16 +250,20 @@ function SidebarMenu({
   pathname: string;
   roomsTab: RoomsHubTab;
   eventsTab: EventsHubTab;
+  poolTab: EventsHubTab;
   pendingBookings: number;
   pendingEventBookings: number;
+  pendingPoolBookings: number;
   onLogout: () => void;
   onPrefetch: (href: string) => void;
   onNavigate?: () => void;
 }) {
   const onRoomsPath = isRoomsHubPath(pathname);
   const onEventsPath = isEventsHubPath(pathname);
+  const onPoolPath = isPoolHubPath(pathname);
   const [roomsExpanded, setRoomsExpanded] = useState(onRoomsPath);
   const [eventsExpanded, setEventsExpanded] = useState(onEventsPath);
+  const [poolExpanded, setPoolExpanded] = useState(onPoolPath);
 
   useEffect(() => {
     if (onRoomsPath) setRoomsExpanded(true);
@@ -219,6 +272,47 @@ function SidebarMenu({
   useEffect(() => {
     if (onEventsPath) setEventsExpanded(true);
   }, [onEventsPath]);
+
+  useEffect(() => {
+    if (onPoolPath) setPoolExpanded(true);
+  }, [onPoolPath]);
+
+  const groupState: Record<
+    NavGroupId,
+    {
+      active: boolean;
+      expanded: boolean;
+      setExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+      pendingCount: number;
+      activeTab: string;
+      pendingKind: string;
+    }
+  > = {
+    rooms: {
+      active: onRoomsPath,
+      expanded: roomsExpanded,
+      setExpanded: setRoomsExpanded,
+      pendingCount: pendingBookings,
+      activeTab: roomsTab,
+      pendingKind: 'room',
+    },
+    events: {
+      active: onEventsPath,
+      expanded: eventsExpanded,
+      setExpanded: setEventsExpanded,
+      pendingCount: pendingEventBookings,
+      activeTab: eventsTab,
+      pendingKind: 'event',
+    },
+    pool: {
+      active: onPoolPath,
+      expanded: poolExpanded,
+      setExpanded: setPoolExpanded,
+      pendingCount: pendingPoolBookings,
+      activeTab: poolTab,
+      pendingKind: 'pool',
+    },
+  };
 
   return (
     <>
@@ -229,11 +323,15 @@ function SidebarMenu({
         <ul className="space-y-1">
           {topNav.map((item) => {
             if ('children' in item) {
-              const isRooms = item.id === 'rooms';
-              const groupActive = isRooms ? onRoomsPath : onEventsPath;
-              const expanded = isRooms ? roomsExpanded : eventsExpanded;
-              const setExpanded = isRooms ? setRoomsExpanded : setEventsExpanded;
-              const pendingCount = isRooms ? pendingBookings : pendingEventBookings;
+              const state = groupState[item.id];
+              const {
+                active: groupActive,
+                expanded,
+                setExpanded,
+                pendingCount,
+                activeTab,
+                pendingKind,
+              } = state;
               return (
                 <li key={item.id}>
                   <div
@@ -268,7 +366,7 @@ function SidebarMenu({
                       {pendingCount > 0 && (
                         <span
                           className="inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
-                          aria-label={`${pendingCount} pending ${isRooms ? 'room' : 'event'} booking${pendingCount === 1 ? '' : 's'}`}
+                          aria-label={`${pendingCount} pending ${pendingKind} booking${pendingCount === 1 ? '' : 's'}`}
                         >
                           {pendingCount > 99 ? '99+' : pendingCount}
                         </span>
@@ -302,9 +400,7 @@ function SidebarMenu({
                         className="mt-1 space-y-0.5 overflow-hidden border-l border-slate-200 py-1 pl-3 ml-4 dark:border-slate-700"
                       >
                         {item.children.map((child, index) => {
-                          const childActive = isRooms
-                            ? onRoomsPath && roomsTab === child.tab
-                            : onEventsPath && eventsTab === child.tab;
+                          const childActive = groupActive && activeTab === child.tab;
                           return (
                             <motion.li
                               key={child.tab}
@@ -388,7 +484,7 @@ function SidebarMenu({
                     height={20}
                     className={cn(active ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400')}
                   />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <span className="truncate">{item.label}</span>
                 </Link>
               </li>
             );
@@ -396,7 +492,7 @@ function SidebarMenu({
         </ul>
       </nav>
 
-      <div className="p-4">
+      <div className="mt-auto border-t border-slate-100 px-3 py-3 dark:border-slate-800">
         <button
           type="button"
           onClick={onLogout}
@@ -440,14 +536,25 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: bookings = [] } = useBookings();
   const { data: eventBookings = [] } = useEventBookings();
+  const { data: offerings = [] } = useOfferings();
   const pendingBookings = useMemo(
     () => bookings.filter((booking) => booking.status === 'pending').length,
     [bookings],
   );
-  const pendingEventBookings = useMemo(
-    () => eventBookings.filter((booking) => booking.status === 'pending').length,
-    [eventBookings],
-  );
+  const pendingEventBookings = useMemo(() => {
+    const catById = new Map(offerings.map((o) => [o.id, o.category]));
+    return eventBookings.filter((booking) => {
+      if (booking.status !== 'pending') return false;
+      return (catById.get(booking.offering_id ?? '') ?? 'event') === 'event';
+    }).length;
+  }, [eventBookings, offerings]);
+  const pendingPoolBookings = useMemo(() => {
+    const catById = new Map(offerings.map((o) => [o.id, o.category]));
+    return eventBookings.filter((booking) => {
+      if (booking.status !== 'pending') return false;
+      return (catById.get(booking.offering_id ?? '') ?? 'event') === 'pool';
+    }).length;
+  }, [eventBookings, offerings]);
 
   const roomsTab = useMemo(() => {
     if (!isRoomsHubPath(pathname)) return 'rooms' as RoomsHubTab;
@@ -461,9 +568,14 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
     return parseEventsHubTab(searchParams.get('tab'));
   }, [pathname, searchParams]);
 
+  const poolTab = useMemo(() => {
+    if (!isPoolHubPath(pathname)) return 'bookings' as EventsHubTab;
+    return parseEventsHubTab(searchParams.get('tab'));
+  }, [pathname, searchParams]);
+
   const title = useMemo(
-    () => titleFromPath(pathname, roomsTab, eventsTab),
-    [pathname, roomsTab, eventsTab],
+    () => titleFromPath(pathname, roomsTab, eventsTab, poolTab),
+    [pathname, roomsTab, eventsTab, poolTab],
   );
 
   useEffect(() => {
@@ -605,8 +717,10 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
           pathname={pathname}
           roomsTab={roomsTab}
           eventsTab={eventsTab}
+          poolTab={poolTab}
           pendingBookings={pendingBookings}
           pendingEventBookings={pendingEventBookings}
+          pendingPoolBookings={pendingPoolBookings}
           onLogout={handleLogout}
           onPrefetch={onPrefetch}
         />
@@ -635,8 +749,10 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
                 pathname={pathname}
                 roomsTab={roomsTab}
                 eventsTab={eventsTab}
+                poolTab={poolTab}
                 pendingBookings={pendingBookings}
                 pendingEventBookings={pendingEventBookings}
+                pendingPoolBookings={pendingPoolBookings}
                 onLogout={() => {
                   setMenuOpen(false);
                   void handleLogout();

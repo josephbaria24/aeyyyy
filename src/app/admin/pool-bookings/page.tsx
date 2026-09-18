@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { OfferingsHub } from '@/components/admin/events/OfferingsHub';
 
-export default function AdminEventBookingsPage() {
+export default function AdminPoolBookingsPage() {
   return (
     <Suspense
       fallback={
@@ -13,7 +13,7 @@ export default function AdminEventBookingsPage() {
         </div>
       }
     >
-      <OfferingsHub category="event" />
+      <OfferingsHub category="pool" />
     </Suspense>
   );
 }

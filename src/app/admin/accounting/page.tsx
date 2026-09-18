@@ -3,10 +3,18 @@
 import { useMemo, useState } from 'react';
 import { ExternalLink, FileImage, Loader2, Plus, Search, Trash2, TrendingDown, TrendingUp, Upload, Wallet, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { useExpenses, useIncome, useInvalidateAdmin } from '@/lib/admin/queries';
+import { useExpenses, useIncome, useInvalidateAdmin, useBookings, useEventBookings } from '@/lib/admin/queries';
 import { formatMoney, sumBy, SYSTEM_CURRENCY, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
 import { uploadToCloudinary } from '@/lib/upload';
 import type { Expense, ExpenseCategory, Income, IncomeCategory } from '@/lib/types/accounting';
+import {
+  INCOME_SOURCE_BADGE,
+  INCOME_SOURCE_LABEL,
+  formatGuestCount,
+  inferIncomeSource,
+  resolveIncomeGuests,
+  type IncomeSource,
+} from '@/lib/accounting/income-source';
 import { toast } from 'sonner';
 import { logActivity } from '@/lib/admin/activity-log';
 import { ConfirmDeleteDialog } from '@/components/admin/ConfirmDeleteDialog';
@@ -22,6 +30,16 @@ const expenseCategories: ExpenseCategory[] = [
   'maintenance',
   'marketing',
   'other',
+];
+
+type IncomeSourceFilter = 'all' | IncomeSource;
+
+const incomeSourceFilters: { value: IncomeSourceFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'room', label: 'Room' },
+  { value: 'event', label: 'Event' },
+  { value: 'pool', label: 'Pool' },
+  { value: 'other', label: 'Other' },
 ];
 
 type StatsPeriod = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'all';
@@ -143,6 +161,21 @@ function dateInPeriod(value: string, bounds: ReturnType<typeof periodBounds>) {
   return !Number.isNaN(date.getTime()) && date >= bounds.start && date < bounds.end;
 }
 
+/** Display dates as "Sep. 10, 2026". */
+function formatLedgerDate(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return value;
+  const date = new Date(`${trimmed}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  return `${month}. ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+function formatLedgerNotes(notes: string | null | undefined) {
+  if (!notes) return '';
+  return notes.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (match) => formatLedgerDate(match));
+}
+
 const emptyIncome = {
   title: '',
   category: 'booking' as IncomeCategory,
@@ -163,9 +196,24 @@ const emptyExpense = {
 export default function AdminAccountingPage() {
   const incomeQuery = useIncome();
   const expensesQuery = useExpenses();
+  const { data: roomBookings = [] } = useBookings();
+  const { data: eventBookings = [] } = useEventBookings();
   const invalidate = useInvalidateAdmin();
   const income = incomeQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
+
+  const roomById = useMemo(
+    () => new Map(roomBookings.map((b) => [b.id, b])),
+    [roomBookings],
+  );
+  const roomByCode = useMemo(
+    () => new Map(roomBookings.map((b) => [b.booking_code.toUpperCase(), b])),
+    [roomBookings],
+  );
+  const eventByCode = useMemo(
+    () => new Map(eventBookings.map((b) => [b.booking_code.toUpperCase(), b])),
+    [eventBookings],
+  );
   const isPending =
     (incomeQuery.isPending && !incomeQuery.data) ||
     (expensesQuery.isPending && !expensesQuery.data);
@@ -177,6 +225,7 @@ export default function AdminAccountingPage() {
   const [entryType, setEntryType] = useState<'income' | 'expense'>('income');
   const [ledgerType, setLedgerType] = useState<'income' | 'expense'>('income');
   const [incomeSearch, setIncomeSearch] = useState('');
+  const [incomeSourceFilter, setIncomeSourceFilter] = useState<IncomeSourceFilter>('all');
   const [expenseSearch, setExpenseSearch] = useState('');
   const [receiptsOpen, setReceiptsOpen] = useState(false);
   const [incomeForm, setIncomeForm] = useState(emptyIncome);
@@ -197,13 +246,35 @@ export default function AdminAccountingPage() {
   );
   const filteredIncome = useMemo(() => {
     const term = incomeSearch.trim().toLowerCase();
-    if (!term) return income;
-    return income.filter((row) =>
-      [row.title, row.category, row.income_date, row.notes, row.amount].some((value) =>
-        String(value ?? '').toLowerCase().includes(term),
-      ),
-    );
-  }, [income, incomeSearch]);
+    return income.filter((row) => {
+      const source = inferIncomeSource(row);
+      if (incomeSourceFilter !== 'all' && source !== incomeSourceFilter) return false;
+      if (!term) return true;
+      return [
+        row.title,
+        row.category,
+        row.income_date,
+        row.notes,
+        row.amount,
+        INCOME_SOURCE_LABEL[source],
+        formatGuestCount(resolveIncomeGuests(row, roomById, roomByCode, eventByCode)),
+      ].some((value) => String(value ?? '').toLowerCase().includes(term));
+    });
+  }, [income, incomeSearch, incomeSourceFilter, roomById, roomByCode, eventByCode]);
+
+  const incomeSourceCounts = useMemo(() => {
+    const counts: Record<IncomeSourceFilter, number> = {
+      all: income.length,
+      room: 0,
+      event: 0,
+      pool: 0,
+      other: 0,
+    };
+    for (const row of income) {
+      counts[inferIncomeSource(row)] += 1;
+    }
+    return counts;
+  }, [income]);
   const filteredExpenses = useMemo(() => {
     const term = expenseSearch.trim().toLowerCase();
     if (!term) return expenses;
@@ -808,7 +879,7 @@ export default function AdminAccountingPage() {
                   <option value="">Select an expense…</option>
                   {expenses.map((row) => (
                     <option key={row.id} value={row.id}>
-                      {row.expense_date} · {row.title}
+                      {formatLedgerDate(row.expense_date)} · {row.title}
                       {row.receipt_url ? ' (has receipt)' : ''}
                     </option>
                   ))}
@@ -883,7 +954,7 @@ export default function AdminAccountingPage() {
                             {row.title}
                           </p>
                           <p className="text-[11px] text-slate-500 sm:text-xs">
-                            {row.expense_date} · {formatMoney(Number(row.amount))}
+                            {formatLedgerDate(row.expense_date)} · {formatMoney(Number(row.amount))}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-1.5 sm:gap-2">
@@ -988,7 +1059,7 @@ export default function AdminAccountingPage() {
                   type="search"
                   value={incomeSearch}
                   onChange={(event) => setIncomeSearch(event.target.value)}
-                  placeholder="Search title, category, date or amount…"
+                  placeholder="Search title, source, date or amount…"
                   className="h-8 w-full rounded-[8px] border-0 bg-slate-100 pl-8 pr-8 text-xs text-slate-700 outline-none focus:bg-white dark:bg-slate-950 dark:text-slate-200"
                 />
                 {incomeSearch && (
@@ -1003,70 +1074,159 @@ export default function AdminAccountingPage() {
                 )}
               </label>
 
-              <ul className="max-h-[55dvh] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800 md:hidden">
-                {filteredIncome.map((row) => (
-                  <li key={row.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.title}</p>
-                      <p className="text-[11px] capitalize text-slate-500 dark:text-slate-400">
-                        {row.income_date} · {row.category}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-sm font-bold text-emerald-600">{formatMoney(Number(row.amount))}</span>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDeleteIncome(row)}
-                        className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+              <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-2 py-2 dark:border-slate-800 sm:px-3">
+                {incomeSourceFilters.map((item) => {
+                  const count = incomeSourceCounts[item.value];
+                  const active = incomeSourceFilter === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setIncomeSourceFilter(item.value)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold transition',
+                        active
+                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
+                      )}
+                    >
+                      {item.label}
+                      <span
+                        className={cn(
+                          'rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none',
+                          active
+                            ? 'bg-white/20 text-white dark:bg-slate-900/15 dark:text-slate-900'
+                            : 'bg-white text-slate-500 dark:bg-slate-900 dark:text-slate-400',
+                        )}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <ul className="max-h-[55dvh] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800 md:hidden">
+                {filteredIncome.map((row) => {
+                  const source = inferIncomeSource(row);
+                  const guests = formatGuestCount(
+                    resolveIncomeGuests(row, roomById, roomByCode, eventByCode),
+                  );
+                  return (
+                    <li key={row.id} className="flex items-start justify-between gap-2 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              'inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1',
+                              INCOME_SOURCE_BADGE[source],
+                            )}
+                          >
+                            {INCOME_SOURCE_LABEL[source]}
+                          </span>
+                          {guests && (
+                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                              {guests}
+                            </span>
+                          )}
+                          <span className="text-[10px] capitalize text-slate-400">{row.category}</span>
+                        </div>
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {row.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {formatLedgerDate(row.income_date)}
+                          {row.notes ? ` · ${formatLedgerNotes(row.notes)}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-sm font-bold text-emerald-600">
+                          {formatMoney(Number(row.amount))}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Delete income"
+                          onClick={() => setPendingDeleteIncome(row)}
+                          className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
                 {filteredIncome.length === 0 && (
                   <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
-                    {incomeSearch ? 'No matching income records.' : 'No income records yet.'}
+                    {incomeSearch || incomeSourceFilter !== 'all'
+                      ? 'No matching income records.'
+                      : 'No income records yet.'}
                   </li>
                 )}
               </ul>
 
               <div className="hidden max-h-[60dvh] overflow-auto md:block">
-                <table className="w-full min-w-[480px] text-sm">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead className="sticky top-0 z-[1] bg-emerald-50 text-xs uppercase text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                     <tr>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Date</th>
+                      <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Source</th>
+                      <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Guests</th>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Title</th>
                       <th className="px-3 py-2.5 text-left sm:px-4 sm:py-3">Amount (₱)</th>
                       <th className="px-3 py-2.5 sm:px-4 sm:py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredIncome.map((row) => (
-                      <tr key={row.id} className="border-b border-gray-50 dark:border-slate-800">
-                        <td className="px-3 py-2.5 sm:px-4 sm:py-3">{row.income_date}</td>
-                        <td className="px-3 py-2.5 sm:px-4 sm:py-3">
-                          <div className="font-medium">{row.title}</div>
-                          <div className="text-xs capitalize text-gray-500 dark:text-slate-400">{row.category}</div>
-                        </td>
-                        <td className="px-3 py-2.5 font-semibold text-emerald-600 sm:px-4 sm:py-3">
-                          {formatMoney(Number(row.amount))}
-                        </td>
-                        <td className="px-3 py-2.5 text-right sm:px-4 sm:py-3">
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteIncome(row)}
-                            className="text-gray-400 hover:text-rose-500 dark:text-slate-500"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredIncome.map((row) => {
+                      const source = inferIncomeSource(row);
+                      const guests = formatGuestCount(
+                        resolveIncomeGuests(row, roomById, roomByCode, eventByCode),
+                      );
+                      return (
+                        <tr key={row.id} className="border-b border-gray-50 dark:border-slate-800">
+                          <td className="px-3 py-2.5 sm:px-4 sm:py-3">{formatLedgerDate(row.income_date)}</td>
+                          <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                            <span
+                              className={cn(
+                                'inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1',
+                                INCOME_SOURCE_BADGE[source],
+                              )}
+                            >
+                              {INCOME_SOURCE_LABEL[source]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-200 sm:px-4 sm:py-3">
+                            {guests ?? '—'}
+                          </td>
+                          <td className="px-3 py-2.5 sm:px-4 sm:py-3">
+                            <div className="font-medium">{row.title}</div>
+                            <div className="text-xs capitalize text-gray-500 dark:text-slate-400">
+                              {row.category}
+                              {row.notes ? ` · ${formatLedgerNotes(row.notes)}` : ''}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 font-semibold text-emerald-600 sm:px-4 sm:py-3">
+                            {formatMoney(Number(row.amount))}
+                          </td>
+                          <td className="px-3 py-2.5 text-right sm:px-4 sm:py-3">
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteIncome(row)}
+                              aria-label="Delete income"
+                              className="text-gray-400 hover:text-rose-500 dark:text-slate-500"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {filteredIncome.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                          {incomeSearch ? 'No matching income records.' : 'No income records yet.'}
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
+                          {incomeSearch || incomeSourceFilter !== 'all'
+                            ? 'No matching income records.'
+                            : 'No income records yet.'}
                         </td>
                       </tr>
                     )}
@@ -1113,7 +1273,7 @@ export default function AdminAccountingPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{row.title}</p>
                       <p className="text-[11px] capitalize text-slate-500 dark:text-slate-400">
-                        {row.expense_date} · {row.category}
+                        {formatLedgerDate(row.expense_date)} · {row.category}
                       </p>
                       {row.receipt_url ? (
                         <a
@@ -1180,7 +1340,7 @@ export default function AdminAccountingPage() {
                   <tbody>
                     {filteredExpenses.map((row) => (
                       <tr key={row.id} className="border-b border-gray-50 dark:border-slate-800">
-                        <td className="px-3 py-2.5 sm:px-4 sm:py-3">{row.expense_date}</td>
+                        <td className="px-3 py-2.5 sm:px-4 sm:py-3">{formatLedgerDate(row.expense_date)}</td>
                         <td className="px-3 py-2.5 sm:px-4 sm:py-3">
                           <div className="font-medium">{row.title}</div>
                           <div className="text-xs capitalize text-gray-500 dark:text-slate-400">{row.category}</div>

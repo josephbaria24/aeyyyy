@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { logActivity } from '@/lib/admin/activity-log';
 import { useInvalidateAdmin, useOfferings } from '@/lib/admin/queries';
 import { slugifyEventTitle } from '@/lib/types/content';
-import { eventAreaImages, type EventOffering } from '@/lib/types/event-offering';
+import { eventAreaImages, type EventOffering, type OfferingCategory } from '@/lib/types/event-offering';
 import { uploadToCloudinary } from '@/lib/upload';
 import { formatMoney } from '@/lib/money';
 import { toast } from 'sonner';
@@ -30,10 +30,12 @@ const field =
 
 const labelClass = 'mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300';
 
-export function AreasTab() {
+export function AreasTab({ category = 'event' }: { category?: OfferingCategory }) {
   const query = useOfferings();
   const invalidate = useInvalidateAdmin();
-  const items = query.data ?? [];
+  const items = (query.data ?? []).filter((item) => item.category === category);
+  const noun = category === 'pool' ? 'pool package' : 'event area';
+  const nounPlural = category === 'pool' ? 'pool packages' : 'event areas';
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -78,6 +80,7 @@ export function AreasTab() {
         sort_order: Number(form.sort_order) || 0,
         is_active: form.is_active,
         availability: form.availability,
+        category,
         image_urls: form.image_urls,
       };
       if (editingId) {
@@ -87,7 +90,7 @@ export function AreasTab() {
           action: 'updated',
           entity: 'offering',
           entityId: editingId,
-          summary: `Updated event area “${payload.title}”`,
+          summary: `Updated ${noun} “${payload.title}”`,
         });
       } else {
         const { data, error } = await supabase
@@ -100,7 +103,7 @@ export function AreasTab() {
           action: 'created',
           entity: 'offering',
           entityId: data?.id,
-          summary: `Added event area “${payload.title}”`,
+          summary: `Added ${noun} “${payload.title}”`,
         });
       }
       setEditingId(null);
@@ -145,7 +148,7 @@ export function AreasTab() {
       action: 'deleted',
       entity: 'offering',
       entityId: item.id,
-      summary: `Deleted event area “${item.title}”`,
+      summary: `Deleted ${noun} “${item.title}”`,
     });
     if (editingId === item.id) {
       setEditingId(null);
@@ -159,17 +162,27 @@ export function AreasTab() {
     <div className="space-y-6">
       <form onSubmit={(e) => void save(e)} className="rounded-[13px] admin-hairline bg-white p-6 dark:bg-slate-900">
         <h2 className="mb-1 text-lg font-bold text-slate-900 dark:text-slate-100">
-          {editingId ? 'Edit event area' : 'Add event area'}
+          {editingId
+            ? category === 'pool'
+              ? 'Edit pool package'
+              : 'Edit event area'
+            : category === 'pool'
+              ? 'Add pool package'
+              : 'Add event area'}
         </h2>
         <p className="mb-4 text-sm text-slate-500">
-          Spaces guests can book (poolside, band area, indoor hall). Photos show on the booking page.
+          {category === 'pool'
+            ? 'Day-use swimming packages guests can book. Photos show on the pool booking page.'
+            : 'Spaces guests can book (hall, outdoor area). Photos show on the event booking page.'}
         </p>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="md:col-span-2">
             <span className={labelClass}>Area name</span>
             <input
               required
-              placeholder="e.g. Poolside, Band area"
+              placeholder={
+                category === 'pool' ? 'e.g. Day swim pass, Family pool package' : 'e.g. Band area, Indoor hall'
+              }
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className={field}
@@ -289,7 +302,7 @@ export function AreasTab() {
             className="inline-flex items-center rounded-[9px] bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
-            {editingId ? 'Update area' : 'Add area'}
+            {editingId ? (category === 'pool' ? 'Update package' : 'Update area') : category === 'pool' ? 'Add package' : 'Add area'}
           </button>
           {editingId && (
             <button
@@ -368,7 +381,10 @@ export function AreasTab() {
             })}
             {items.length === 0 && (
               <li className="px-4 py-10 text-center text-sm text-slate-500">
-                No event areas yet. Add poolside, indoor hall, or other spaces.
+                No {nounPlural} yet.
+                {category === 'pool'
+                  ? ' Add day-use swim or family pool packages.'
+                  : ' Add hall, outdoor space, or other celebration areas.'}
               </li>
             )}
           </ul>
@@ -378,15 +394,17 @@ export function AreasTab() {
       <ConfirmDeleteDialog
         open={pendingDelete != null}
         onOpenChange={(open) => !open && setPendingDelete(null)}
-        title="Delete this area?"
+        title={category === 'pool' ? 'Delete this pool package?' : 'Delete this area?'}
         requireTyping
         typingValue="DELETE"
         description={
           pendingDelete
-            ? `“${pendingDelete.title}” will be removed. Guests will no longer see or book this area.`
+            ? category === 'pool'
+              ? `“${pendingDelete.title}” will be removed. Guests will no longer see or book this pool package.`
+              : `“${pendingDelete.title}” will be removed. Guests will no longer see or book this area.`
             : ''
         }
-        confirmLabel="Delete area"
+        confirmLabel={category === 'pool' ? 'Delete package' : 'Delete area'}
         onConfirm={async () => {
           if (pendingDelete) await remove(pendingDelete);
         }}

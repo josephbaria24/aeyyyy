@@ -14,7 +14,7 @@ import { EventAreaCalendar } from '@/components/EventAreaCalendar';
 import { createClient } from '@/lib/supabase/client';
 import { useActiveEvents, useActiveOfferings, useActiveRooms, useEventOccupancyStays, useOccupancyStays } from '@/lib/admin/queries';
 import { makeEventBookingCode, roomBookingHrefFromEvent } from '@/lib/types/event-booking';
-import { eventAreaImages, type EventOffering } from '@/lib/types/event-offering';
+import { eventAreaImages, filterOfferingsByCategory, type EventOffering, type OfferingCategory } from '@/lib/types/event-offering';
 import { formatMoney, SYSTEM_CURRENCY } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -36,16 +36,41 @@ function addDaysIso(iso: string, days: number) {
   return toIsoDate(d);
 }
 
-export default function EventBooking() {
+export default function EventBooking({ category = 'event' }: { category?: OfferingCategory }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const slugParam = searchParams.get('slug')?.trim() || '';
-  const { data: offerings = [], isPending: offeringsPending } = useActiveOfferings();
+  const { data: allOfferings = [], isPending: offeringsPending } = useActiveOfferings();
+  const offerings = useMemo(
+    () => filterOfferingsByCategory(allOfferings, category),
+    [allOfferings, category],
+  );
   const { data: events = [], isPending: eventsPending } = useActiveEvents();
   const { data: occupancy = { stays: [], unavailable: [] } } = useEventOccupancyStays();
   const { data: activeRooms = [] } = useActiveRooms();
   const { data: occupancyStays = [] } = useOccupancyStays();
-  const isPending = offeringsPending || eventsPending;
+  const isPending = offeringsPending || (category === 'event' && eventsPending);
+  const isPool = category === 'pool';
+  const backHref = isPool ? '/' : '/#events';
+  const backLabel = isPool ? 'Back to home' : 'Back to events';
+  const pageTitle = isPool ? 'Book the pool' : 'Book an area';
+  const pageBlurb = isPool
+    ? 'Choose a day-use swim package, pick your date, and tell us how many guests.'
+    : 'Choose a space, pick dates on the calendar, and tell us what you’re celebrating.';
+  const chooseLabel = isPool ? 'Choose a package' : 'Choose an area';
+  const submitLabel = isPool ? 'Pool booking submitted' : 'Event booking submitted';
+  const emptyMessage = isPool
+    ? 'No pool packages are open yet. Check back soon, or'
+    : 'No event areas are open yet. Check back soon, or';
+  const toastUnavailable = isPool
+    ? 'This pool package is not available right now'
+    : 'This area is not available right now';
+  const toastPickDate = isPool ? 'Choose when you want to swim' : 'Choose when you need the area';
+  const toastCapacity = (cap: number) =>
+    isPool ? `This package allows up to ${cap} guests` : `This area allows up to ${cap} guests`;
+  const toastBlocked = isPool
+    ? 'Those dates are already reserved for this package'
+    : 'Those dates are already reserved for this area';
 
   const datedEvents = useMemo(
     () => events.filter((event) => event.is_bookable && event.event_date),
@@ -127,11 +152,11 @@ export default function EventBooking() {
     e.preventDefault();
     if (!selected) return;
     if (areaUnavailable) {
-      toast.error('This area is not available right now');
+      toast.error(toastUnavailable);
       return;
     }
     if (!form.startDate) {
-      toast.error('Choose when you need the area');
+      toast.error(toastPickDate);
       return;
     }
     if (endDate < form.startDate) {
@@ -139,14 +164,14 @@ export default function EventBooking() {
       return;
     }
     if (overCapacity) {
-      toast.error(`This area allows up to ${selected.capacity} guests`);
+      toast.error(toastCapacity(selected.capacity));
       return;
     }
     const blocked = areaStays.some(
       (stay) => form.startDate < stay.check_out && endDate >= stay.check_in,
     );
     if (blocked) {
-      toast.error('Those dates are already reserved for this area');
+      toast.error(toastBlocked);
       return;
     }
     setSaving(true);
@@ -190,7 +215,7 @@ export default function EventBooking() {
         startDate: form.startDate,
         endDate,
       });
-      toast.success('Event booking submitted', { description: `Reference ${code}` });
+      toast.success(submitLabel, { description: `Reference ${code}` });
     } catch (err) {
       const message =
         err instanceof Error
@@ -207,11 +232,11 @@ export default function EventBooking() {
       <Navbar />
       <main className="mx-auto w-full max-w-5xl px-4 pb-20 pt-28 md:px-6 md:pt-32">
         <Link
-          href="/#events"
+          href={backHref}
           className="mb-8 inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to events
+          {backLabel}
         </Link>
 
         {submitted ? (
@@ -277,9 +302,9 @@ export default function EventBooking() {
           </motion.div>
         ) : (
           <>
-            <h1 className="text-3xl font-bold md:text-4xl">Book an area</h1>
+            <h1 className="text-3xl font-bold md:text-4xl">{pageTitle}</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/65">
-              Choose a space, pick dates on the calendar, and tell us what you’re celebrating.
+              {pageBlurb}
             </p>
 
             {isPending ? (
@@ -288,7 +313,7 @@ export default function EventBooking() {
               </div>
             ) : offerings.length === 0 ? (
               <p className="mt-10 rounded-2xl border border-white/10 bg-white/5 px-5 py-8 text-center text-sm text-white/70">
-                No event areas are open yet. Check back soon, or{' '}
+                {emptyMessage}{' '}
                 <Link href="/rooms" className="text-accent underline">
                   book a room
                 </Link>
@@ -298,7 +323,7 @@ export default function EventBooking() {
               <form onSubmit={(e) => void submit(e)} className="mt-8 grid gap-8 lg:grid-cols-5">
                 <div className="space-y-4 lg:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-white/45">
-                    Choose an area
+                    {chooseLabel}
                   </p>
                   <div className="space-y-2">
                     {offerings.map((item) => {
@@ -496,7 +521,7 @@ export default function EventBooking() {
               </form>
             )}
 
-            {datedEvents.length > 0 && (
+            {category === 'event' && datedEvents.length > 0 && (
               <p className="mt-10 text-center text-xs text-white/40">
                 Looking for a listed concert or dinner? Those are on the{' '}
                 <Link href="/#events" className="text-accent underline">

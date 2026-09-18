@@ -15,14 +15,16 @@ import {
   subMonths,
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { useEventBookings } from '@/lib/admin/queries';
+import { useEventBookings, useOfferings } from '@/lib/admin/queries';
 import { adminEventsHref } from '@/lib/admin/events-hub';
+import { adminPoolHref } from '@/lib/admin/pool-hub';
 import { eventCoversDate } from '@/lib/event-status';
 import {
   BOOKING_STATUS_LABEL,
   type BookingStatus,
 } from '@/lib/types/booking';
 import type { EventBooking } from '@/lib/types/event-booking';
+import type { OfferingCategory } from '@/lib/types/event-offering';
 import { cn } from '@/lib/utils';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -56,9 +58,18 @@ function bookingInMonth(booking: EventBooking, monthStart: Date, monthEnd: Date)
   return start <= monthEnd && end >= monthStart;
 }
 
-export function EventCalendarTab() {
+export function EventCalendarTab({ category = 'event' }: { category?: OfferingCategory }) {
   const query = useEventBookings();
-  const bookings = query.data ?? [];
+  const offeringsQuery = useOfferings();
+  const offerings = offeringsQuery.data ?? [];
+  const allBookings = query.data ?? [];
+  const bookings = useMemo(() => {
+    const catById = new Map(offerings.map((o) => [o.id, o.category]));
+    return allBookings.filter(
+      (b) => (catById.get(b.offering_id ?? '') ?? 'event') === category,
+    );
+  }, [allBookings, offerings, category]);
+  const bookingHref = category === 'pool' ? adminPoolHref : adminEventsHref;
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => toIsoDate(new Date()));
 
@@ -104,8 +115,14 @@ export function EventCalendarTab() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 rounded-[13px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Event calendar</h2>
-          <p className="mt-1 text-sm text-slate-500">Area bookings by day. Click a date for details.</p>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {category === 'pool' ? 'Pool calendar' : 'Event calendar'}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {category === 'pool'
+              ? 'Pool bookings by day. Click a date for details.'
+              : 'Area bookings by day. Click a date for details.'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -201,7 +218,7 @@ export function EventCalendarTab() {
           <ul className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto">
             {selectedBookings.length === 0 && (
               <li className="rounded-[9px] bg-slate-50 px-3 py-6 text-center text-xs text-slate-400 dark:bg-slate-800/50">
-                No events on this date
+                No {category === 'pool' ? 'pool bookings' : 'events'} on this date
               </li>
             )}
             {selectedBookings.map((b) => (
@@ -222,7 +239,7 @@ export function EventCalendarTab() {
                 </p>
                 <p className="mt-0.5 font-mono text-[10px] opacity-70">{b.booking_code}</p>
                 <Link
-                  href={adminEventsHref('bookings', { booking: b.id })}
+                  href={bookingHref('bookings', { booking: b.id })}
                   className="mt-2 inline-block text-[11px] font-bold underline-offset-2 hover:underline"
                 >
                   Open in Bookings

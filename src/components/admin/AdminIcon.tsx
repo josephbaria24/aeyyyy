@@ -49,6 +49,7 @@ export const adminIcons = {
   visible: 'solar:eye-bold-duotone',
   chevronRight: 'solar:alt-arrow-right-linear',
   events: 'solar:calendar-mark-bold-duotone',
+  pool: 'solar:swimming-bold-duotone',
   areas: 'solar:layers-bold-duotone',
   activity: 'solar:history-bold-duotone',
   staff: 'solar:user-id-bold-duotone',

@@ -68,6 +68,7 @@ export function Footer() {
               <li><Link href="/rooms" className="hover:text-accent cursor-pointer transition-colors">Rooms</Link></li>
               <li><Link href="/#events" className="hover:text-accent cursor-pointer transition-colors">Events</Link></li>
               <li><Link href="/book/event" className="hover:text-accent cursor-pointer transition-colors">Book an event</Link></li>
+              <li><Link href="/book/pool" className="hover:text-accent cursor-pointer transition-colors">Book the pool</Link></li>
               <li><Link href="/book" className="hover:text-accent cursor-pointer transition-colors">Book a room</Link></li>
             </ul>
           </div>

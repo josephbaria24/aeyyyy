@@ -1,3 +1,5 @@
+export type OfferingCategory = 'event' | 'pool';
+
 export type EventOffering = {
   id: string;
   title: string;
@@ -9,9 +11,21 @@ export type EventOffering = {
   sort_order: number;
   is_active: boolean;
   availability: 'open' | 'unavailable';
+  category: OfferingCategory;
   image_urls: string[];
   created_at: string;
 };
+
+export function isOfferingCategory(value: string): value is OfferingCategory {
+  return value === 'event' || value === 'pool';
+}
+
+export function filterOfferingsByCategory(
+  offerings: EventOffering[],
+  category: OfferingCategory,
+) {
+  return offerings.filter((item) => item.category === category);
+}
 
 export function eventAreaImages(row: { image_urls?: string[] | null }) {
   return Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : [];
@@ -32,6 +46,7 @@ export function mapEventOffering(
     sort_order: Number(row.sort_order) || 0,
     is_active: Boolean(row.is_active),
     availability: row.availability === 'unavailable' ? 'unavailable' : 'open',
+    category: row.category === 'pool' ? 'pool' : 'event',
     image_urls,
     created_at: String(row.created_at ?? ''),
   };

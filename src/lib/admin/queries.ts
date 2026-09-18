@@ -646,7 +646,12 @@ export function prefetchAdminRoute(queryClient: QueryClient, href: string) {
     });
     return;
   }
-  if (href === '/admin/event-bookings' || href.startsWith('/admin/event-bookings?')) {
+  if (
+    href === '/admin/event-bookings' ||
+    href.startsWith('/admin/event-bookings?') ||
+    href === '/admin/pool-bookings' ||
+    href.startsWith('/admin/pool-bookings?')
+  ) {
     void queryClient.prefetchQuery({
       queryKey: adminKeys.eventBookings,
       queryFn: fetchEventBookings,

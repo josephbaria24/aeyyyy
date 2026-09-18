@@ -12,10 +12,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AdminIcon, adminIcons } from '@/components/admin/AdminIcon';
-import { useBookings, useEventBookings } from '@/lib/admin/queries';
+import { useBookings, useEventBookings, useOfferings } from '@/lib/admin/queries';
 import { adminRoomsHref } from '@/lib/admin/rooms-hub';
+import { adminEventsHref } from '@/lib/admin/events-hub';
+import { adminPoolHref } from '@/lib/admin/pool-hub';
 import type { Booking } from '@/lib/types/booking';
 import { BOOKING_STATUS_LABEL } from '@/lib/types/booking';
+import type { EventBooking } from '@/lib/types/event-booking';
 import { cn } from '@/lib/utils';
 
 function relativeTime(iso: string) {
@@ -62,18 +65,68 @@ function NotificationRow({ booking }: { booking: Booking }) {
   );
 }
 
+function OfferingBookingNotification({
+  booking,
+  kind,
+}: {
+  booking: EventBooking;
+  kind: 'event' | 'pool';
+}) {
+  const href =
+    kind === 'pool'
+      ? adminPoolHref('bookings', { booking: booking.id })
+      : adminEventsHref('bookings', { booking: booking.id });
+  return (
+    <DropdownMenuItem asChild className="cursor-pointer p-0 focus:bg-transparent">
+      <Link
+        href={href}
+        prefetch
+        className="flex w-full items-start gap-3 rounded-[9px] px-3 py-2.5 outline-none transition hover:bg-slate-50 focus:bg-slate-50 dark:hover:bg-slate-800 dark:focus:bg-slate-800"
+      >
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
+          <AdminIcon
+            icon={kind === 'pool' ? adminIcons.pool : adminIcons.events}
+            width={16}
+            height={16}
+          />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+            New {kind === 'pool' ? 'pool' : 'event'} · {booking.booking_code}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
+            {booking.name} · {booking.event_title}
+          </span>
+        </span>
+        <span className="mt-1 shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+          Pending
+        </span>
+      </Link>
+    </DropdownMenuItem>
+  );
+}
+
 export function AdminNotifications() {
   const { data: bookings = [], isPending } = useBookings();
   const { data: eventBookings = [] } = useEventBookings();
+  const { data: offerings = [] } = useOfferings();
 
   const pending = useMemo(
     () => bookings.filter((b) => b.status === 'pending'),
     [bookings],
   );
-  const pendingEvents = useMemo(
-    () => eventBookings.filter((b) => b.status === 'pending'),
-    [eventBookings],
-  );
+  const { pendingEvents, pendingPool } = useMemo(() => {
+    const catById = new Map(offerings.map((o) => [o.id, o.category]));
+    const pendingAll = eventBookings.filter((b) => b.status === 'pending');
+    return {
+      pendingEvents: pendingAll.filter(
+        (b) => (catById.get(b.offering_id ?? '') ?? 'event') === 'event',
+      ),
+      pendingPool: pendingAll.filter(
+        (b) => (catById.get(b.offering_id ?? '') ?? 'event') === 'pool',
+      ),
+    };
+  }, [eventBookings, offerings]);
 
   const recentActivity = useMemo(() => {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -82,7 +135,7 @@ export function AdminNotifications() {
       .slice(0, 4);
   }, [bookings]);
 
-  const badgeCount = pending.length + pendingEvents.length;
+  const badgeCount = pending.length + pendingEvents.length + pendingPool.length;
   const badgeLabel = badgeCount > 99 ? '99+' : String(badgeCount);
 
   return (
@@ -132,7 +185,7 @@ export function AdminNotifications() {
         <div className="max-h-[22rem] overflow-y-auto py-1">
           {isPending && bookings.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-slate-400">Loading…</p>
-          ) : pending.length === 0 && pendingEvents.length === 0 ? (
+          ) : pending.length === 0 && pendingEvents.length === 0 && pendingPool.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 You&apos;re all caught up
@@ -157,32 +210,25 @@ export function AdminNotifications() {
                     Event bookings
                   </p>
                   {pendingEvents.slice(0, 8).map((booking) => (
-                    <DropdownMenuItem
-                      asChild
+                    <OfferingBookingNotification
                       key={booking.id}
-                      className="cursor-pointer p-0 focus:bg-transparent"
-                    >
-                      <Link
-                        href={`/admin/event-bookings?booking=${booking.id}`}
-                        prefetch
-                        className="flex w-full items-start gap-3 rounded-[9px] px-3 py-2.5 outline-none transition hover:bg-slate-50 focus:bg-slate-50 dark:hover:bg-slate-800 dark:focus:bg-slate-800"
-                      >
-                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
-                          <AdminIcon icon={adminIcons.events} width={16} height={16} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">
-                            New event · {booking.booking_code}
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
-                            {booking.name} · {booking.event_title}
-                          </span>
-                        </span>
-                        <span className="mt-1 shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
-                          Pending
-                        </span>
-                      </Link>
-                    </DropdownMenuItem>
+                      booking={booking}
+                      kind="event"
+                    />
+                  ))}
+                </>
+              )}
+              {pendingPool.length > 0 && (
+                <>
+                  <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Pool bookings
+                  </p>
+                  {pendingPool.slice(0, 8).map((booking) => (
+                    <OfferingBookingNotification
+                      key={booking.id}
+                      booking={booking}
+                      kind="pool"
+                    />
                   ))}
                 </>
               )}

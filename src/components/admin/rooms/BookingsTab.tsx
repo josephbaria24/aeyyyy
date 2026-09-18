@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ImagePlus, Link2, Loader2, Receipt, Search, X } from 'lucide-react';
+import { ChevronDown, ImagePlus, Link2, Loader2, Pencil, Receipt, Search, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useBookings, useInvalidateAdmin, useRooms } from '@/lib/admin/queries';
 import { formatMoney, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
@@ -20,6 +20,7 @@ import {
   usePaymentDrafts,
 } from '@/components/admin/rooms/BookingPaymentEditor';
 import { ManualReservationDialog } from '@/components/admin/rooms/ManualReservationDialog';
+import { EditRoomBookingDialog } from '@/components/admin/rooms/EditRoomBookingDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,6 +82,7 @@ export function BookingsTab({
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
   const [sort, setSort] = useState<BookingSort>('newest');
   const [evidenceBooking, setEvidenceBooking] = useState<Booking | null>(null);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const { drafts, setDrafts, ensureDraft } = usePaymentDrafts(bookings, rooms);
 
   const guestKey = guestEmail?.trim().toLowerCase() || '';
@@ -458,6 +460,10 @@ export function BookingsTab({
                           ),
                         )}
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setEditingBooking(booking)}>
+                          <Pencil className="mr-2 h-3.5 w-3.5" />
+                          Edit details
+                        </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setEvidenceBooking(booking)}>
                           <ImagePlus className="mr-2 h-3.5 w-3.5" />
                           Attachments
@@ -589,6 +595,10 @@ export function BookingsTab({
                               ),
                             )}
                             <DropdownMenuSeparator />
+                            <DropdownMenuItem onSelect={() => setEditingBooking(booking)}>
+                              <Pencil className="mr-2 h-3.5 w-3.5" />
+                              Edit details
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setEvidenceBooking(booking)}>
                               <ImagePlus className="mr-2 h-3.5 w-3.5" />
                               Attachments
@@ -632,6 +642,15 @@ export function BookingsTab({
         open={evidenceBooking != null}
         onOpenChange={(open) => {
           if (!open) setEvidenceBooking(null);
+        }}
+      />
+      <EditRoomBookingDialog
+        booking={editingBooking}
+        bookings={bookings}
+        rooms={rooms}
+        open={editingBooking != null}
+        onOpenChange={(open) => {
+          if (!open) setEditingBooking(null);
         }}
       />
     </>

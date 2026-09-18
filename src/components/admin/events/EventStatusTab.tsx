@@ -7,13 +7,14 @@ import { createClient } from '@/lib/supabase/client';
 import { logActivity } from '@/lib/admin/activity-log';
 import { useEventBookings, useInvalidateAdmin, useOfferings } from '@/lib/admin/queries';
 import { adminEventsHref } from '@/lib/admin/events-hub';
+import { adminPoolHref } from '@/lib/admin/pool-hub';
 import {
   AREA_LIVE_STATUS_LABEL,
   getAreaStatusForDate,
   todayIsoLocal,
   type AreaLiveStatus,
 } from '@/lib/event-status';
-import { eventAreaImages, type EventOffering } from '@/lib/types/event-offering';
+import { eventAreaImages, type EventOffering, type OfferingCategory } from '@/lib/types/event-offering';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -24,14 +25,22 @@ const STATUS_STYLES: Record<AreaLiveStatus, string> = {
   unavailable: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
 };
 
-export function EventStatusTab() {
+export function EventStatusTab({ category = 'event' }: { category?: OfferingCategory }) {
   const areasQuery = useOfferings();
   const bookingsQuery = useEventBookings();
   const invalidate = useInvalidateAdmin();
-  const areas = areasQuery.data ?? [];
-  const bookings = bookingsQuery.data ?? [];
+  const areas = useMemo(
+    () => (areasQuery.data ?? []).filter((item) => item.category === category),
+    [areasQuery.data, category],
+  );
+  const allBookings = bookingsQuery.data ?? [];
+  const bookings = useMemo(() => {
+    const ids = new Set(areas.map((a) => a.id));
+    return allBookings.filter((b) => b.offering_id && ids.has(b.offering_id));
+  }, [allBookings, areas]);
   const [date, setDate] = useState(todayIsoLocal());
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const bookingHref = category === 'pool' ? adminPoolHref : adminEventsHref;
 
   const cards = useMemo(
     () =>
@@ -86,8 +95,14 @@ export function EventStatusTab() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 rounded-[13px] admin-hairline bg-white p-4 dark:bg-slate-900 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Area availability</h2>
-          <p className="text-sm text-slate-500">Open, reserved, in use, or manually closed for a date.</p>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {category === 'pool' ? 'Pool availability' : 'Area availability'}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {category === 'pool'
+              ? 'Open, reserved, in use, or manually closed for a date.'
+              : 'Open, reserved, in use, or manually closed for a date.'}
+          </p>
         </div>
         <label className="text-xs font-semibold text-slate-500">
           Date
@@ -127,7 +142,7 @@ export function EventStatusTab() {
                   <p className="font-semibold text-slate-900 dark:text-slate-100">{area.title}</p>
                   {booking && (
                     <Link
-                      href={adminEventsHref('bookings', { booking: booking.id })}
+                      href={bookingHref('bookings', { booking: booking.id })}
                       className="mt-1 block text-xs text-slate-500 underline-offset-2 hover:underline"
                     >
                       {booking.booking_code} · {booking.name}
@@ -152,7 +167,7 @@ export function EventStatusTab() {
         })}
         {cards.length === 0 && (
           <p className="col-span-full py-10 text-center text-sm text-slate-500">
-            Add an event area first.
+            Add {category === 'pool' ? 'a pool package' : 'an event area'} first.
           </p>
         )}
       </div>
