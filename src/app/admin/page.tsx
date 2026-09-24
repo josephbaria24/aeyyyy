@@ -313,9 +313,13 @@ export default function AdminDashboardPage() {
             </p>
             <p className="mt-0.5 text-xs text-slate-400">Current net balance</p>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div
+            className="flex shrink-0 items-center gap-3 rounded-[14px] border border-white/15 bg-white/5 px-3 py-2.5 backdrop-blur-sm sm:gap-3.5 sm:px-4 sm:py-3"
+            title={`${confirmed} of ${filteredBookings.length} bookings are confirmed`}
+            aria-label={`${confirmationRate}% of bookings are confirmed: ${confirmed} of ${filteredBookings.length}`}
+          >
             <div
-              className="relative grid h-16 w-16 place-items-center rounded-full sm:h-20 sm:w-20"
+              className="relative grid h-14 w-14 shrink-0 place-items-center rounded-full sm:h-16 sm:w-16"
               style={{
                 background: `conic-gradient(#38bdf8 ${confirmationRate * 3.6}deg, rgba(255,255,255,.12) 0deg)`,
               }}
@@ -324,9 +328,20 @@ export default function AdminDashboardPage() {
                 <span className="text-sm font-bold sm:text-base">{confirmationRate}%</span>
               </div>
             </div>
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold">Confirmed</p>
-              <p className="text-xs text-slate-400">booking rate</p>
+            <div className="min-w-0 max-w-[9.5rem] sm:max-w-[12rem]">
+              <p className="text-sm font-semibold leading-tight">Bookings confirmed</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-300 sm:text-xs">
+                {filteredBookings.length === 0
+                  ? 'No bookings in this period yet'
+                  : `${confirmed} of ${filteredBookings.length} booking${
+                      filteredBookings.length === 1 ? '' : 's'
+                    } confirmed`}
+              </p>
+              {pending > 0 && (
+                <p className="mt-0.5 text-[10px] text-amber-300/90 sm:text-[11px]">
+                  {pending} still pending
+                </p>
+              )}
             </div>
           </div>
         </div>
