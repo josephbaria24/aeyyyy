@@ -236,12 +236,20 @@ export default function BookingReceiptPage() {
             </p>
           </div>
           <div>
-            <p className="text-gray-500 dark:text-slate-400">Check-in</p>
+            <p className="text-gray-500 dark:text-slate-400">
+              {booking.stay_kind === 'day_use' ? 'Stay date' : 'Check-in'}
+            </p>
             <p className="font-semibold text-[#0a1628] dark:text-slate-100">{booking.check_in}</p>
           </div>
           <div>
-            <p className="text-gray-500 dark:text-slate-400">Check-out</p>
-            <p className="font-semibold text-[#0a1628] dark:text-slate-100">{booking.check_out}</p>
+            <p className="text-gray-500 dark:text-slate-400">
+              {booking.stay_kind === 'day_use' ? 'Hours' : 'Check-out'}
+            </p>
+            <p className="font-semibold text-[#0a1628] dark:text-slate-100">
+              {booking.stay_kind === 'day_use'
+                ? [booking.start_time, booking.end_time].filter(Boolean).join('–') || 'Day use'
+                : booking.check_out}
+            </p>
           </div>
           <div>
             <p className="text-gray-500 dark:text-slate-400">Guests / Rooms</p>
@@ -254,10 +262,15 @@ export default function BookingReceiptPage() {
           </div>
           {pricing && (
             <div>
-              <p className="text-gray-500 dark:text-slate-400">Nights / Rate</p>
+              <p className="text-gray-500 dark:text-slate-400">
+                {booking.stay_kind === 'day_use' ? 'Stay price' : 'Nights / Rate'}
+              </p>
               <p className="font-semibold text-[#0a1628] dark:text-slate-100">
-                {pricing.nights} night{pricing.nights === 1 ? '' : 's'}
-                {pricing.rate > 0 ? ` · ${formatMoney(pricing.rate)} / night` : ''}
+                {booking.stay_kind === 'day_use'
+                  ? formatMoney(pricing.stay)
+                  : `${pricing.nights} night${pricing.nights === 1 ? '' : 's'}${
+                      pricing.rate > 0 ? ` · ${formatMoney(pricing.rate)} / night` : ''
+                    }`}
               </p>
             </div>
           )}

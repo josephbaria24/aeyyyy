@@ -13,11 +13,13 @@ import {
 } from '@/lib/money';
 import { getStayAvailability } from '@/lib/room-status';
 import {
+  addDaysIso,
   bookingGrandTotal,
   newChargeId,
   otherChargesTotal,
   type Booking,
   type BookingCharge,
+  type StayKind,
 } from '@/lib/types/booking';
 import type { Room } from '@/lib/types/room';
 import {
@@ -29,20 +31,28 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const fieldClass =
   'w-full rounded-[9px] admin-hairline bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-accent/25 dark:bg-slate-950 dark:text-slate-100';
+
+type PriceMode = 'default' | 'custom';
 
 type EditForm = {
   name: string;
   email: string;
   phone: string;
   destination: string;
+  stayKind: StayKind;
   checkIn: string;
   checkOut: string;
+  startTime: string;
+  endTime: string;
   adults: string;
   children: string;
   rate: string;
+  priceMode: PriceMode;
+  customAmount: string;
   amountPaid: string;
   requests: string;
   notes: string;
@@ -88,11 +98,16 @@ export function EditRoomBookingDialog({
     email: '',
     phone: '',
     destination: '',
+    stayKind: 'overnight',
     checkIn: '',
     checkOut: '',
+    startTime: '08:00',
+    endTime: '14:00',
     adults: '1',
     children: '0',
     rate: '',
+    priceMode: 'default',
+    customAmount: '',
     amountPaid: '0',
     requests: '',
     notes: '',
@@ -100,16 +115,22 @@ export function EditRoomBookingDialog({
 
   useEffect(() => {
     if (!booking || !open) return;
+    const isDayUse = booking.stay_kind === 'day_use';
     setForm({
       name: booking.name,
       email: booking.email,
       phone: booking.phone ?? '',
       destination: booking.destination,
+      stayKind: isDayUse ? 'day_use' : 'overnight',
       checkIn: booking.check_in,
-      checkOut: booking.check_out,
+      checkOut: isDayUse ? '' : booking.check_out,
+      startTime: booking.start_time ?? '08:00',
+      endTime: booking.end_time ?? '14:00',
       adults: String(booking.adults),
       children: String(booking.children),
       rate: String(booking.rate_per_night),
+      priceMode: 'custom',
+      customAmount: String(booking.amount),
       amountPaid: String(booking.amount_paid),
       requests: booking.requests ?? '',
       notes: booking.notes ?? '',
@@ -121,6 +142,10 @@ export function EditRoomBookingDialog({
     () => rooms.find((room) => room.name === form.destination) ?? null,
     [form.destination, rooms],
   );
+
+  const stayCheckIn = form.checkIn;
+  const stayCheckOut =
+    form.stayKind === 'day_use' ? addDaysIso(form.checkIn, 1) : form.checkOut;
 
   const confirmedStays = useMemo(
     () =>
@@ -136,19 +161,49 @@ export function EditRoomBookingDialog({
 
   const availability = useMemo(
     () =>
-      getStayAvailability(selectedRoom, confirmedStays, form.checkIn, form.checkOut),
-    [confirmedStays, form.checkIn, form.checkOut, selectedRoom],
+      getStayAvailability(selectedRoom, confirmedStays, stayCheckIn, stayCheckOut),
+    [confirmedStays, selectedRoom, stayCheckIn, stayCheckOut],
   );
 
-  const nights = nightsBetween(form.checkIn, form.checkOut);
+  const nights =
+    form.stayKind === 'day_use' ? 1 : nightsBetween(form.checkIn, form.checkOut);
   const rate = Number(form.rate) || 0;
-  const stayTotal = calculateStayAmount(rate, form.checkIn, form.checkOut, 1);
+  const defaultStayTotal =
+    form.stayKind === 'day_use'
+      ? rate
+      : calculateStayAmount(rate, form.checkIn, form.checkOut, 1);
+  const customStayTotal = Math.max(0, Number(form.customAmount) || 0);
+  const stayTotal =
+    form.priceMode === 'custom' ? customStayTotal : defaultStayTotal;
+  const storedRate =
+    form.stayKind === 'day_use'
+      ? stayTotal
+      : form.priceMode === 'custom' && nights > 0
+        ? Math.round((stayTotal / nights) * 100) / 100
+        : rate;
   const extrasTotal = otherChargesTotal(otherCharges);
   const dueTotal = bookingGrandTotal({ amount: stayTotal, other_charges: otherCharges });
   const paid = Math.max(0, Number(form.amountPaid) || 0);
+  const invalidOvernight = form.stayKind === 'overnight' && nights < 1;
+  const invalidDayUse =
+    form.stayKind === 'day_use' &&
+    (!form.checkIn || !form.startTime || !form.endTime || form.endTime <= form.startTime);
+  const invalidDates = invalidOvernight || invalidDayUse;
 
   const set = (key: keyof EditForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setStayKind = (stayKind: StayKind) => {
+    setForm((prev) => ({
+      ...prev,
+      stayKind,
+      priceMode: stayKind === 'day_use' ? 'custom' : prev.priceMode,
+      customAmount:
+        stayKind === 'day_use' && prev.customAmount === ''
+          ? prev.rate || String(prev.customAmount)
+          : prev.customAmount,
+    }));
   };
 
   const chooseRoom = (name: string) => {
@@ -181,8 +236,22 @@ export function EditRoomBookingDialog({
       toast.error('Choose a room');
       return;
     }
-    if (!form.checkIn || !form.checkOut || nights < 1) {
+    if (form.stayKind === 'overnight' && (!form.checkIn || !form.checkOut || nights < 1)) {
       toast.error('Check-out must be after check-in');
+      return;
+    }
+    if (form.stayKind === 'day_use') {
+      if (!form.startTime || !form.endTime) {
+        toast.error('Set start and end times for the timed stay');
+        return;
+      }
+      if (form.endTime <= form.startTime) {
+        toast.error('End time must be after start time');
+        return;
+      }
+    }
+    if (form.priceMode === 'custom' && form.customAmount.trim() === '') {
+      toast.error('Enter a custom stay price, or switch back to the default rate');
       return;
     }
     if (availability.kind === 'unavailable') {
@@ -217,6 +286,8 @@ export function EditRoomBookingDialog({
     setSaving(true);
     try {
       const supabase = createClient();
+      const checkOut =
+        form.stayKind === 'day_use' ? addDaysIso(form.checkIn, 1) : form.checkOut;
       const { error } = await supabase
         .from('bookings')
         .update({
@@ -225,10 +296,13 @@ export function EditRoomBookingDialog({
           phone: form.phone.trim() || null,
           destination: form.destination.trim(),
           check_in: form.checkIn,
-          check_out: form.checkOut,
+          check_out: checkOut,
           adults: Math.max(1, Number(form.adults) || 1),
           children: Math.max(0, Number(form.children) || 0),
-          rate_per_night: rate,
+          stay_kind: form.stayKind,
+          start_time: form.stayKind === 'day_use' ? form.startTime : null,
+          end_time: form.stayKind === 'day_use' ? form.endTime : null,
+          rate_per_night: storedRate,
           amount: stayTotal,
           amount_paid: paid,
           other_charges: cleanedCharges,
@@ -315,25 +389,95 @@ export function EditRoomBookingDialog({
                   )}
               </select>
             </FieldLabel>
-            <FieldLabel label="Check-in">
-              <input
-                required
-                type="date"
-                value={form.checkIn}
-                onChange={(event) => set('checkIn', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
-            <FieldLabel label="Check-out">
-              <input
-                required
-                type="date"
-                min={form.checkIn}
-                value={form.checkOut}
-                onChange={(event) => set('checkOut', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
+
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Stay type
+              </p>
+              <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-slate-100 p-1 dark:bg-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setStayKind('overnight')}
+                  className={cn(
+                    'rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                    form.stayKind === 'overnight'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400',
+                  )}
+                >
+                  Overnight (default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStayKind('day_use')}
+                  className={cn(
+                    'rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                    form.stayKind === 'day_use'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400',
+                  )}
+                >
+                  Timed stay (hours)
+                </button>
+              </div>
+            </div>
+
+            {form.stayKind === 'overnight' ? (
+              <>
+                <FieldLabel label="Check-in">
+                  <input
+                    required
+                    type="date"
+                    value={form.checkIn}
+                    onChange={(event) => set('checkIn', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+                <FieldLabel label="Check-out">
+                  <input
+                    required
+                    type="date"
+                    min={form.checkIn}
+                    value={form.checkOut}
+                    onChange={(event) => set('checkOut', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+              </>
+            ) : (
+              <>
+                <FieldLabel label="Stay date">
+                  <input
+                    required
+                    type="date"
+                    value={form.checkIn}
+                    onChange={(event) => set('checkIn', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-3">
+                  <FieldLabel label="From">
+                    <input
+                      required
+                      type="time"
+                      value={form.startTime}
+                      onChange={(event) => set('startTime', event.target.value)}
+                      className={fieldClass}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Until">
+                    <input
+                      required
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) => set('endTime', event.target.value)}
+                      className={fieldClass}
+                    />
+                  </FieldLabel>
+                </div>
+              </>
+            )}
+
             <FieldLabel label="Adults">
               <input
                 required
@@ -353,17 +497,102 @@ export function EditRoomBookingDialog({
                 className={fieldClass}
               />
             </FieldLabel>
-            <FieldLabel label="Rate per night">
-              <input
-                required
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.rate}
-                onChange={(event) => set('rate', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
+
+            <div className="space-y-3 rounded-[11px] border border-orange-200/80 bg-orange-50/50 p-3 dark:border-orange-900/40 dark:bg-orange-950/20 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-orange-900 dark:text-orange-200">
+                    Stay price
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Default room rate or a custom amount for this stay.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-1 rounded-[8px] bg-orange-100/90 p-1 dark:bg-orange-950/50">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        priceMode: 'default',
+                        customAmount: '',
+                      }))
+                    }
+                    className={cn(
+                      'rounded-[6px] px-2.5 py-1.5 text-[10px] font-bold transition',
+                      form.priceMode === 'default'
+                        ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                        : 'text-orange-900 dark:text-orange-300',
+                    )}
+                  >
+                    Default rate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        priceMode: 'custom',
+                        customAmount:
+                          prev.customAmount ||
+                          String(defaultStayTotal || Number(prev.rate) || 0),
+                      }))
+                    }
+                    className={cn(
+                      'rounded-[6px] px-2.5 py-1.5 text-[10px] font-bold transition',
+                      form.priceMode === 'custom'
+                        ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                        : 'text-orange-900 dark:text-orange-300',
+                    )}
+                  >
+                    Custom price
+                  </button>
+                </div>
+              </div>
+
+              {form.priceMode === 'default' ? (
+                <FieldLabel
+                  label={form.stayKind === 'day_use' ? 'Stay price' : 'Rate per night'}
+                >
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                      {SYSTEM_CURRENCY_SYMBOL}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.rate}
+                      onChange={(event) => set('rate', event.target.value)}
+                      className={`${fieldClass} pl-7`}
+                    />
+                  </div>
+                </FieldLabel>
+              ) : (
+                <FieldLabel
+                  label={
+                    form.stayKind === 'day_use' ? 'Custom stay price' : 'Custom stay total'
+                  }
+                >
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                      {SYSTEM_CURRENCY_SYMBOL}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.customAmount}
+                      onChange={(event) => set('customAmount', event.target.value)}
+                      className={`${fieldClass} pl-7`}
+                    />
+                  </div>
+                </FieldLabel>
+              )}
+            </div>
+
             <FieldLabel label="Amount paid">
               <input
                 type="number"
@@ -446,9 +675,19 @@ export function EditRoomBookingDialog({
             <div className="rounded-[9px] bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800 sm:col-span-2">
               <p className="text-xs font-semibold text-slate-500">Due total</p>
               <p className="mt-1 font-bold text-slate-900 dark:text-slate-100">
-                {nights > 0
-                  ? `${formatMoney(dueTotal)}${extrasTotal > 0 ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}` : ''} · ${nights} night${nights === 1 ? '' : 's'}`
-                  : 'Select valid dates'}
+                {!invalidDates
+                  ? `${formatMoney(dueTotal)}${
+                      extrasTotal > 0
+                        ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}`
+                        : ''
+                    }${
+                      form.stayKind === 'day_use'
+                        ? ` · ${form.startTime}–${form.endTime}`
+                        : ` · ${nights} night${nights === 1 ? '' : 's'}`
+                    }`
+                  : form.stayKind === 'day_use'
+                    ? 'Set a valid time window'
+                    : 'Select valid dates'}
               </p>
             </div>
 
@@ -495,7 +734,7 @@ export function EditRoomBookingDialog({
               type="submit"
               disabled={
                 saving ||
-                nights < 1 ||
+                invalidDates ||
                 availability.kind === 'unavailable' ||
                 availability.kind === 'conflict'
               }

@@ -41,6 +41,8 @@ export type BookingCharge = {
   amount: number;
 };
 
+export type StayKind = 'overnight' | 'day_use';
+
 export type Booking = {
   id: string;
   booking_code: string;
@@ -55,7 +57,7 @@ export type Booking = {
   rooms: number;
   requests: string | null;
   status: BookingStatus;
-  /** Stay subtotal (rate × nights × rooms). */
+  /** Stay subtotal (rate × nights × rooms, or flat day-use price). */
   amount: number;
   rate_per_night: number;
   amount_paid: number;
@@ -64,6 +66,9 @@ export type Booking = {
   evidence_urls: string[];
   currency: string;
   notes: string | null;
+  stay_kind: StayKind;
+  start_time: string | null;
+  end_time: string | null;
   linked_event_booking_id: string | null;
   linked_event_code: string | null;
   created_at: string;
@@ -89,6 +94,9 @@ export type BookingInsert = {
   evidence_urls?: string[];
   currency?: string;
   notes?: string | null;
+  stay_kind?: StayKind;
+  start_time?: string | null;
+  end_time?: string | null;
   linked_event_booking_id?: string | null;
   linked_event_code?: string | null;
 };
@@ -196,10 +204,35 @@ export function normalizeBooking(row: Partial<Booking> & Record<string, unknown>
       : [],
     currency: String(row.currency ?? 'PHP'),
     notes: (row.notes as string | null) ?? null,
+    stay_kind: row.stay_kind === 'day_use' ? 'day_use' : 'overnight',
+    start_time: typeof row.start_time === 'string' ? row.start_time.slice(0, 5) : null,
+    end_time: typeof row.end_time === 'string' ? row.end_time.slice(0, 5) : null,
     linked_event_booking_id: row.linked_event_booking_id
       ? String(row.linked_event_booking_id)
       : null,
     linked_event_code: row.linked_event_code ? String(row.linked_event_code) : null,
     created_at: String(row.created_at ?? ''),
   };
+}
+
+/** Display check-in/out or same-day timed window. */
+export function formatBookingStayLabel(
+  booking: Pick<Booking, 'stay_kind' | 'check_in' | 'check_out' | 'start_time' | 'end_time'>,
+) {
+  if (booking.stay_kind === 'day_use') {
+    const times = [booking.start_time, booking.end_time].filter(Boolean).join('–');
+    return times ? `${booking.check_in} · ${times}` : `${booking.check_in} (day use)`;
+  }
+  return `${booking.check_in} → ${booking.check_out}`;
+}
+
+/** Next calendar day as YYYY-MM-DD (local). */
+export function addDaysIso(iso: string, days: number) {
+  const date = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  date.setDate(date.getDate() + days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

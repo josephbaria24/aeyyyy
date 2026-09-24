@@ -16,12 +16,14 @@ import {
   todayIsoLocal,
 } from '@/lib/room-status';
 import {
+  addDaysIso,
   bookingGrandTotal,
   newChargeId,
   otherChargesTotal,
   type Booking,
   type BookingCharge,
   type BookingStatus,
+  type StayKind,
 } from '@/lib/types/booking';
 import type { Room } from '@/lib/types/room';
 import {
@@ -36,17 +38,25 @@ import {
 import { toast } from 'sonner';
 import { logActivity } from '@/lib/admin/activity-log';
 import { uploadToCloudinary } from '@/lib/upload';
+import { cn } from '@/lib/utils';
+
+type PriceMode = 'default' | 'custom';
 
 type ManualForm = {
   name: string;
   email: string;
   phone: string;
   destination: string;
+  stayKind: StayKind;
   checkIn: string;
   checkOut: string;
+  startTime: string;
+  endTime: string;
   adults: string;
   children: string;
   rate: string;
+  priceMode: PriceMode;
+  customAmount: string;
   amountPaid: string;
   status: Extract<BookingStatus, 'confirmed' | 'pending'>;
   requests: string;
@@ -59,11 +69,16 @@ function initialForm(room?: Room): ManualForm {
     email: '',
     phone: '',
     destination: room?.name ?? '',
+    stayKind: 'overnight',
     checkIn: todayIsoLocal(),
     checkOut: '',
+    startTime: '08:00',
+    endTime: '14:00',
     adults: '1',
     children: '0',
     rate: room ? String(room.price_per_night) : '',
+    priceMode: 'default',
+    customAmount: '',
     amountPaid: '0',
     status: 'confirmed',
     requests: '',
@@ -128,6 +143,10 @@ export function ManualReservationDialog({
     [form.destination, rooms],
   );
 
+  const stayCheckIn = form.checkIn;
+  const stayCheckOut =
+    form.stayKind === 'day_use' ? addDaysIso(form.checkIn, 1) : form.checkOut;
+
   const confirmedStays = useMemo(
     () =>
       bookings
@@ -142,26 +161,51 @@ export function ManualReservationDialog({
 
   const availability = useMemo(
     () =>
-      getStayAvailability(
-        selectedRoom,
-        confirmedStays,
-        form.checkIn,
-        form.checkOut,
-      ),
-    [confirmedStays, form.checkIn, form.checkOut, selectedRoom],
+      getStayAvailability(selectedRoom, confirmedStays, stayCheckIn, stayCheckOut),
+    [confirmedStays, selectedRoom, stayCheckIn, stayCheckOut],
   );
 
-  const nights = nightsBetween(form.checkIn, form.checkOut);
+  const nights =
+    form.stayKind === 'day_use' ? 1 : nightsBetween(form.checkIn, form.checkOut);
   const rate = Number(form.rate) || 0;
-  const stayTotal = calculateStayAmount(rate, form.checkIn, form.checkOut, 1);
+  const defaultStayTotal =
+    form.stayKind === 'day_use'
+      ? rate
+      : calculateStayAmount(rate, form.checkIn, form.checkOut, 1);
+  const customStayTotal = Math.max(0, Number(form.customAmount) || 0);
+  const stayTotal =
+    form.priceMode === 'custom' ? customStayTotal : defaultStayTotal;
+  const storedRate =
+    form.stayKind === 'day_use'
+      ? stayTotal
+      : form.priceMode === 'custom' && nights > 0
+        ? Math.round((stayTotal / nights) * 100) / 100
+        : rate;
   const extrasTotal = otherChargesTotal(otherCharges);
   const total = bookingGrandTotal({ amount: stayTotal, other_charges: otherCharges });
   const paid = Math.max(0, Number(form.amountPaid) || 0);
-  const invalidDates = Boolean(form.checkOut) && nights < 1;
+  const invalidOvernight = form.stayKind === 'overnight' && Boolean(form.checkOut) && nights < 1;
+  const invalidDayUse =
+    form.stayKind === 'day_use' &&
+    (!form.checkIn || !form.startTime || !form.endTime || form.endTime <= form.startTime);
+  const invalidDates = invalidOvernight || invalidDayUse;
   const blocked = availability.kind !== 'open';
 
   const set = (key: keyof ManualForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setStayKind = (stayKind: StayKind) => {
+    setForm((prev) => ({
+      ...prev,
+      stayKind,
+      priceMode: stayKind === 'day_use' ? 'custom' : prev.priceMode,
+      customAmount:
+        stayKind === 'day_use' && prev.customAmount === ''
+          ? prev.rate
+          : prev.customAmount,
+      checkOut: stayKind === 'overnight' ? prev.checkOut : '',
+    }));
   };
 
   const chooseRoom = (name: string) => {
@@ -170,6 +214,10 @@ export function ManualReservationDialog({
       ...prev,
       destination: name,
       rate: room ? String(room.price_per_night) : prev.rate,
+      customAmount:
+        prev.stayKind === 'day_use' && prev.priceMode === 'custom' && room
+          ? String(room.price_per_night)
+          : prev.customAmount,
     }));
   };
 
@@ -229,8 +277,22 @@ export function ManualReservationDialog({
       toast.error('Choose a room');
       return;
     }
-    if (invalidDates || nights < 1) {
+    if (form.stayKind === 'overnight' && (invalidOvernight || nights < 1)) {
       toast.error('Check-out must be after check-in');
+      return;
+    }
+    if (form.stayKind === 'day_use') {
+      if (!form.startTime || !form.endTime) {
+        toast.error('Set start and end times for the timed stay');
+        return;
+      }
+      if (form.endTime <= form.startTime) {
+        toast.error('End time must be after start time');
+        return;
+      }
+    }
+    if (form.priceMode === 'custom' && form.customAmount.trim() === '') {
+      toast.error('Enter a custom stay price, or switch back to the default rate');
       return;
     }
     if (availability.kind === 'unavailable') {
@@ -259,22 +321,26 @@ export function ManualReservationDialog({
     try {
       const supabase = createClient();
       const code = walkInCode();
+      const checkOut = form.stayKind === 'day_use' ? addDaysIso(form.checkIn, 1) : form.checkOut;
       const { data: inserted, error } = await supabase
         .from('bookings')
         .insert({
           booking_code: code,
           name: form.name.trim(),
-          email: form.email.trim(),
+          email: form.email.trim() || 'walk-in@aeyyyy.local',
           phone: form.phone.trim() || null,
           destination: selectedRoom.name,
           check_in: form.checkIn,
-          check_out: form.checkOut,
+          check_out: checkOut,
           adults: Math.max(1, Number(form.adults) || 1),
           children: Math.max(0, Number(form.children) || 0),
           rooms: 1,
           requests: form.requests.trim() || null,
           status: form.status,
-          rate_per_night: rate,
+          stay_kind: form.stayKind,
+          start_time: form.stayKind === 'day_use' ? form.startTime : null,
+          end_time: form.stayKind === 'day_use' ? form.endTime : null,
+          rate_per_night: storedRate,
           amount: stayTotal,
           amount_paid: paid,
           other_charges: cleanedCharges,
@@ -290,6 +356,10 @@ export function ManualReservationDialog({
       if (paid > 0 && inserted) {
         const guestTotal =
           Math.max(1, Number(form.adults) || 1) + Math.max(0, Number(form.children) || 0);
+        const stayNote =
+          form.stayKind === 'day_use'
+            ? `${selectedRoom.name} · ${form.checkIn} ${form.startTime}–${form.endTime}`
+            : `${selectedRoom.name} (${form.checkIn} to ${checkOut})`;
         const { error: incomeError } = await supabase.from('income').insert({
           title: `Walk-in ${inserted.booking_code} — ${form.name.trim()}`,
           category: 'booking',
@@ -297,7 +367,7 @@ export function ManualReservationDialog({
           currency: SYSTEM_CURRENCY,
           income_date: form.checkIn,
           booking_id: inserted.id,
-          notes: `${selectedRoom.name} (${form.checkIn} to ${form.checkOut}) · ${guestTotal} guest${guestTotal === 1 ? '' : 's'}`,
+          notes: `${stayNote} · ${guestTotal} guest${guestTotal === 1 ? '' : 's'}`,
         });
         if (incomeError) incomeWarning = ' Payment was saved, but income could not be recorded.';
       }
@@ -318,7 +388,7 @@ export function ManualReservationDialog({
       toast.error('Could not create reservation', {
         description:
           error instanceof Error
-            ? `${error.message} — run supabase/booking-evidence.sql if the evidence column is missing.`
+            ? `${error.message} — if stay_kind/time columns are missing, run supabase/booking-day-use.sql.`
             : 'Insert failed',
       });
     } finally {
@@ -399,25 +469,100 @@ export function ManualReservationDialog({
                 ))}
               </select>
             </FieldLabel>
-            <FieldLabel label="Check-in">
-              <input
-                required
-                type="date"
-                value={form.checkIn}
-                onChange={(event) => set('checkIn', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
-            <FieldLabel label="Check-out">
-              <input
-                required
-                type="date"
-                min={form.checkIn}
-                value={form.checkOut}
-                onChange={(event) => set('checkOut', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
+
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Stay type
+              </p>
+              <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-slate-100 p-1 dark:bg-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setStayKind('overnight')}
+                  className={cn(
+                    'rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                    form.stayKind === 'overnight'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400',
+                  )}
+                >
+                  Overnight (default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStayKind('day_use')}
+                  className={cn(
+                    'rounded-[8px] px-3 py-2 text-xs font-bold transition',
+                    form.stayKind === 'day_use'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400',
+                  )}
+                >
+                  Timed stay (hours)
+                </button>
+              </div>
+              <p className="mt-1.5 text-[10px] text-slate-500">
+                {form.stayKind === 'day_use'
+                  ? 'Same-day stay for a set window (e.g. 6 hours). Blocks the room for that date.'
+                  : 'Standard multi-night stay with check-in and check-out dates.'}
+              </p>
+            </div>
+
+            {form.stayKind === 'overnight' ? (
+              <>
+                <FieldLabel label="Check-in">
+                  <input
+                    required
+                    type="date"
+                    value={form.checkIn}
+                    onChange={(event) => set('checkIn', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+                <FieldLabel label="Check-out">
+                  <input
+                    required
+                    type="date"
+                    min={form.checkIn}
+                    value={form.checkOut}
+                    onChange={(event) => set('checkOut', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+              </>
+            ) : (
+              <>
+                <FieldLabel label="Stay date">
+                  <input
+                    required
+                    type="date"
+                    value={form.checkIn}
+                    onChange={(event) => set('checkIn', event.target.value)}
+                    className={fieldClass}
+                  />
+                </FieldLabel>
+                <div className="grid grid-cols-2 gap-3">
+                  <FieldLabel label="From">
+                    <input
+                      required
+                      type="time"
+                      value={form.startTime}
+                      onChange={(event) => set('startTime', event.target.value)}
+                      className={fieldClass}
+                    />
+                  </FieldLabel>
+                  <FieldLabel label="Until">
+                    <input
+                      required
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) => set('endTime', event.target.value)}
+                      className={fieldClass}
+                    />
+                  </FieldLabel>
+                </div>
+              </>
+            )}
+
             <FieldLabel label="Adults">
               <input
                 required
@@ -437,17 +582,116 @@ export function ManualReservationDialog({
                 className={fieldClass}
               />
             </FieldLabel>
-            <FieldLabel label="Rate per night">
-              <input
-                required
-                type="number"
-                min={0}
-                step="0.01"
-                value={form.rate}
-                onChange={(event) => set('rate', event.target.value)}
-                className={fieldClass}
-              />
-            </FieldLabel>
+
+            <div className="space-y-3 rounded-[11px] border border-orange-200/80 bg-orange-50/50 p-3 dark:border-orange-900/40 dark:bg-orange-950/20 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-orange-900 dark:text-orange-200">
+                    Stay price
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Use the room rate, or set a custom amount for this reservation.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-1 rounded-[8px] bg-orange-100/90 p-1 dark:bg-orange-950/50">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        priceMode: 'default',
+                        customAmount: '',
+                      }))
+                    }
+                    className={cn(
+                      'rounded-[6px] px-2.5 py-1.5 text-[10px] font-bold transition',
+                      form.priceMode === 'default'
+                        ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                        : 'text-orange-900 dark:text-orange-300',
+                    )}
+                  >
+                    Default rate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        priceMode: 'custom',
+                        customAmount:
+                          prev.customAmount ||
+                          String(
+                            prev.stayKind === 'day_use'
+                              ? Number(prev.rate) || 0
+                              : defaultStayTotal || Number(prev.rate) || 0,
+                          ),
+                      }))
+                    }
+                    className={cn(
+                      'rounded-[6px] px-2.5 py-1.5 text-[10px] font-bold transition',
+                      form.priceMode === 'custom'
+                        ? 'bg-[#0b3b3c] text-amber-50 shadow-sm dark:bg-teal-900 dark:text-amber-100'
+                        : 'text-orange-900 dark:text-orange-300',
+                    )}
+                  >
+                    Custom price
+                  </button>
+                </div>
+              </div>
+
+              {form.priceMode === 'default' ? (
+                <FieldLabel
+                  label={form.stayKind === 'day_use' ? 'Stay price' : 'Rate per night'}
+                >
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                      {SYSTEM_CURRENCY_SYMBOL}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.rate}
+                      onChange={(event) => set('rate', event.target.value)}
+                      className={`${fieldClass} pl-7`}
+                    />
+                  </div>
+                </FieldLabel>
+              ) : (
+                <FieldLabel
+                  label={
+                    form.stayKind === 'day_use' ? 'Custom stay price' : 'Custom stay total'
+                  }
+                >
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                      {SYSTEM_CURRENCY_SYMBOL}
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.customAmount}
+                      onChange={(event) => set('customAmount', event.target.value)}
+                      className={`${fieldClass} pl-7`}
+                      placeholder={String(defaultStayTotal || rate || 0)}
+                    />
+                  </div>
+                </FieldLabel>
+              )}
+              <p className="text-[10px] text-slate-500">
+                {form.priceMode === 'default'
+                  ? form.stayKind === 'day_use'
+                    ? `Using ${formatMoney(stayTotal)} for this timed stay.`
+                    : nights > 0
+                      ? `${formatMoney(rate)} × ${nights} night${nights === 1 ? '' : 's'} = ${formatMoney(stayTotal)}.`
+                      : 'Select valid dates to see the stay total.'
+                  : `Custom total: ${formatMoney(stayTotal)}.`}
+              </p>
+            </div>
+
             <FieldLabel label="Amount paid">
               <input
                 type="number"
@@ -458,6 +702,19 @@ export function ManualReservationDialog({
                 className={fieldClass}
               />
             </FieldLabel>
+            <FieldLabel label="Reservation status">
+              <select
+                value={form.status}
+                onChange={(event) =>
+                  set('status', event.target.value as ManualForm['status'])
+                }
+                className={fieldClass}
+              >
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+              </select>
+            </FieldLabel>
+
             <div className="space-y-2 rounded-[11px] border border-amber-200/70 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20 sm:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -526,24 +783,23 @@ export function ManualReservationDialog({
                 </div>
               )}
             </div>
-            <FieldLabel label="Reservation status">
-              <select
-                value={form.status}
-                onChange={(event) =>
-                  set('status', event.target.value as ManualForm['status'])
-                }
-                className={fieldClass}
-              >
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-              </select>
-            </FieldLabel>
-            <div className="rounded-[9px] bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800">
+
+            <div className="rounded-[9px] bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800 sm:col-span-2">
               <p className="text-xs font-semibold text-slate-500">Due total</p>
               <p className="mt-1 font-bold text-slate-900 dark:text-slate-100">
-                {nights > 0
-                  ? `${formatMoney(total)}${extrasTotal > 0 ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}` : ''} · ${nights} night${nights === 1 ? '' : 's'}`
-                  : 'Select valid dates'}
+                {!invalidDates && (form.stayKind === 'day_use' || nights > 0)
+                  ? `${formatMoney(total)}${
+                      extrasTotal > 0
+                        ? ` · stay ${formatMoney(stayTotal)} + extras ${formatMoney(extrasTotal)}`
+                        : ''
+                    }${
+                      form.stayKind === 'day_use'
+                        ? ` · ${form.startTime}–${form.endTime}`
+                        : ` · ${nights} night${nights === 1 ? '' : 's'}`
+                    }`
+                  : form.stayKind === 'day_use'
+                    ? 'Set a valid time window'
+                    : 'Select valid dates'}
               </p>
             </div>
             <FieldLabel label="Special requests" wide>

@@ -10,6 +10,7 @@ import {
   BOOKING_STATUS_LABEL,
   bookingGrandTotal,
   bookingUnpaid,
+  formatBookingStayLabel,
   type Booking,
   type BookingStatus,
 } from '@/lib/types/booking';
@@ -392,7 +393,7 @@ export function BookingsTab({
                         {booking.destination}
                       </p>
                       <p className="text-[10px] text-slate-400">
-                        {booking.check_in} → {booking.check_out}
+                        {formatBookingStayLabel(booking)}
                       </p>
                     </div>
                     <div className="text-right">
@@ -544,7 +545,7 @@ export function BookingsTab({
                           {booking.destination}
                         </p>
                         <p className="text-xs">
-                          {booking.check_in} → {booking.check_out}
+                          {formatBookingStayLabel(booking)}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-400">
                           Due {formatMoney(bookingGrandTotal(booking))}
