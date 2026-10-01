@@ -203,6 +203,7 @@ export default function Booking() {
         rooms: 1,
         requests: formData.requests || null,
         status: 'pending',
+        booking_channel: 'website',
         rate_per_night: rate,
         amount,
         amount_paid: 0,

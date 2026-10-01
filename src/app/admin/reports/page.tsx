@@ -5,6 +5,27 @@ import Link from 'next/link';
 import { CalendarDays, Loader2, Printer, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useBookings, useExpenses, useIncome } from '@/lib/admin/queries';
 import { formatMoney, sumBy } from '@/lib/money';
+import {
+  BOOKING_CHANNEL_LABEL,
+  BOOKING_CHANNELS,
+  formatBookingChannel,
+} from '@/lib/types/booking';
+
+/** Owner's monthly cut of recorded income. */
+const OWNER_SHARE_RATE = 0.4;
+
+function roundMoney(value: number) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number);
+  if (!year || !month) return key;
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
 function monthStart() {
   const d = new Date();
@@ -55,6 +76,48 @@ export default function AdminReportsPage() {
   const totalIncome = sumBy(filteredIncome, (i) => Number(i.amount));
   const totalExpenses = sumBy(filteredExpenses, (e) => Number(e.amount));
   const net = totalIncome - totalExpenses;
+  const ownerShare = roundMoney(totalIncome * OWNER_SHARE_RATE);
+  const innShare = roundMoney(totalIncome - ownerShare);
+
+  const monthlyShares = useMemo(() => {
+    const keys = new Set<string>();
+    for (const row of filteredIncome) keys.add(row.income_date.slice(0, 7));
+    for (const row of filteredExpenses) keys.add(row.expense_date.slice(0, 7));
+    return [...keys].sort().map((key) => {
+      const income = sumBy(
+        filteredIncome.filter((row) => row.income_date.startsWith(key)),
+        (row) => Number(row.amount),
+      );
+      const expenses = sumBy(
+        filteredExpenses.filter((row) => row.expense_date.startsWith(key)),
+        (row) => Number(row.amount),
+      );
+      const owner = roundMoney(income * OWNER_SHARE_RATE);
+      return {
+        key,
+        label: monthLabel(key),
+        income,
+        expenses,
+        owner,
+        inn: roundMoney(income - owner),
+        net: income - expenses,
+      };
+    });
+  }, [filteredExpenses, filteredIncome]);
+
+  const channelTotals = useMemo(
+    () =>
+      BOOKING_CHANNELS.map((channel) => {
+        const rows = filteredBookings.filter((booking) => booking.booking_channel === channel);
+        return {
+          channel,
+          count: rows.length,
+          amount: sumBy(rows, (booking) => Number(booking.amount) || 0),
+        };
+      }).filter((row) => row.count > 0),
+    [filteredBookings],
+  );
+
 
   const printReport = () => window.print();
 
@@ -166,6 +229,88 @@ export default function AdminReportsPage() {
                 </p>
               </div>
             </div>
+
+            <div className="mt-4 rounded-[12px] bg-[#0b4f8a] p-3 text-white dark:border dark:border-sky-800 dark:bg-sky-950 sm:p-4">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-sky-100 dark:text-sky-300">
+                    Owner&apos;s share
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-sky-100/90 dark:text-sky-200/80">
+                    40% of income in this period, calculated automatically. The inn keeps the other 60%.
+                  </p>
+                </div>
+                <p className="report-money text-2xl font-black text-white dark:text-sky-50">
+                  {formatMoney(ownerShare)}
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="rounded-[9px] bg-[#083e6d] px-3 py-2 dark:bg-slate-950">
+                  <p className="text-[10px] font-semibold uppercase text-sky-200 dark:text-sky-400">Income</p>
+                  <p className="report-money text-sm font-bold text-white">{formatMoney(totalIncome)}</p>
+                </div>
+                <div className="rounded-[9px] bg-white px-3 py-2 text-[#0b4f8a] dark:bg-sky-300 dark:text-sky-950">
+                  <p className="text-[10px] font-semibold uppercase">Owner 40%</p>
+                  <p className="report-money text-sm font-bold">{formatMoney(ownerShare)}</p>
+                </div>
+                <div className="col-span-2 rounded-[9px] bg-[#083e6d] px-3 py-2 dark:bg-slate-950 sm:col-span-1">
+                  <p className="text-[10px] font-semibold uppercase text-sky-200 dark:text-sky-400">Inn 60%</p>
+                  <p className="report-money text-sm font-bold text-white">{formatMoney(innShare)}</p>
+                </div>
+              </div>
+            </div>
+
+            {monthlyShares.length > 0 && (
+              <div className="mt-4 overflow-x-auto">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  By month
+                </p>
+                <table className="w-full min-w-[520px] text-xs sm:text-sm">
+                  <thead className="text-[10px] uppercase text-slate-400">
+                    <tr>
+                      <th className="py-1 text-left">Month</th>
+                      <th className="py-1 text-right">Income</th>
+                      <th className="py-1 text-right">Owner 40%</th>
+                      <th className="py-1 text-right">Inn 60%</th>
+                      <th className="py-1 text-right">Expenses</th>
+                      <th className="py-1 text-right">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyShares.map((month) => (
+                      <tr key={month.key} className="border-t border-slate-100 dark:border-slate-800">
+                        <td className="py-2 font-semibold">{month.label}</td>
+                        <td className="report-money py-2 text-right">{formatMoney(month.income)}</td>
+                        <td className="report-money py-2 text-right font-bold text-[#0b4f8a] dark:text-sky-300">
+                          {formatMoney(month.owner)}
+                        </td>
+                        <td className="report-money py-2 text-right">{formatMoney(month.inn)}</td>
+                        <td className="report-money py-2 text-right">{formatMoney(month.expenses)}</td>
+                        <td className="report-money py-2 text-right">{formatMoney(month.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {channelTotals.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  Room bookings by source
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {channelTotals.map((row) => (
+                    <div
+                      key={row.channel}
+                      className="rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      {BOOKING_CHANNEL_LABEL[row.channel]} · {row.count} · {formatMoney(row.amount)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="overflow-hidden rounded-[13px] admin-hairline bg-white dark:bg-slate-900">
@@ -195,8 +340,8 @@ export default function AdminReportsPage() {
                     </p>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold capitalize text-slate-500 shadow-sm dark:bg-slate-800 dark:text-slate-300">
-                      {booking.status}
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-slate-500 shadow-sm dark:bg-slate-800 dark:text-slate-300">
+                      {formatBookingChannel(booking)} · {booking.status}
                     </span>
                     <Link
                       href={`/admin/receipts/${booking.id}`}
@@ -220,6 +365,7 @@ export default function AdminReportsPage() {
                   <tr>
                     <th className="px-4 py-3 text-left">Code</th>
                     <th className="px-4 py-3 text-left">Guest</th>
+                    <th className="px-4 py-3 text-left">Source</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Amount</th>
                     <th className="px-4 py-3 text-right print:hidden">Receipt</th>
@@ -230,6 +376,7 @@ export default function AdminReportsPage() {
                     <tr key={b.id} className="border-b border-gray-50 dark:border-slate-800">
                       <td className="px-4 py-3">{b.booking_code}</td>
                       <td className="px-4 py-3">{b.name}</td>
+                      <td className="px-4 py-3">{formatBookingChannel(b)}</td>
                       <td className="px-4 py-3 capitalize">{b.status}</td>
                       <td className="report-money px-4 py-3 font-semibold">{formatMoney(Number(b.amount || 0))}</td>
                       <td className="px-4 py-3 text-right print:hidden">
@@ -241,7 +388,7 @@ export default function AdminReportsPage() {
                   ))}
                   {filteredBookings.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
                         No bookings in this date range.
                       </td>
                     </tr>

@@ -1075,6 +1075,7 @@ function TransferBookingDialog({
           rooms: 1,
           requests: booking.requests,
           status: 'confirmed',
+          booking_channel: 'walk_in',
           rate_per_night: Number(rate) || 0,
           amount: roomStayTotal,
           amount_paid: paid,

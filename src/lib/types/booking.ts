@@ -43,6 +43,39 @@ export type BookingCharge = {
 
 export type StayKind = 'overnight' | 'day_use';
 
+/** Where a room reservation came from. */
+export type BookingChannel = 'walk_in' | 'agoda' | 'booking_com' | 'website' | 'other';
+
+export const BOOKING_CHANNELS: BookingChannel[] = [
+  'walk_in',
+  'agoda',
+  'booking_com',
+  'website',
+  'other',
+];
+
+export const BOOKING_CHANNEL_LABEL: Record<BookingChannel, string> = {
+  walk_in: 'Walk-in',
+  agoda: 'Agoda',
+  booking_com: 'Booking.com',
+  website: 'Website',
+  other: 'Other',
+};
+
+export function formatBookingChannel(
+  booking: Pick<Booking, 'booking_channel' | 'booking_channel_detail'>,
+) {
+  if (booking.booking_channel === 'other') {
+    return booking.booking_channel_detail?.trim() || 'Other';
+  }
+  if (!booking.booking_channel) return 'Not set';
+  return BOOKING_CHANNEL_LABEL[booking.booking_channel];
+}
+
+export function isBookingChannel(value: string): value is BookingChannel {
+  return (BOOKING_CHANNELS as string[]).includes(value);
+}
+
 export type Booking = {
   id: string;
   booking_code: string;
@@ -69,6 +102,9 @@ export type Booking = {
   stay_kind: StayKind;
   start_time: string | null;
   end_time: string | null;
+  booking_channel: BookingChannel | null;
+  /** Free-text source when booking_channel is other. */
+  booking_channel_detail: string | null;
   linked_event_booking_id: string | null;
   linked_event_code: string | null;
   created_at: string;
@@ -97,6 +133,8 @@ export type BookingInsert = {
   stay_kind?: StayKind;
   start_time?: string | null;
   end_time?: string | null;
+  booking_channel?: BookingChannel | null;
+  booking_channel_detail?: string | null;
   linked_event_booking_id?: string | null;
   linked_event_code?: string | null;
 };
@@ -207,6 +245,13 @@ export function normalizeBooking(row: Partial<Booking> & Record<string, unknown>
     stay_kind: row.stay_kind === 'day_use' ? 'day_use' : 'overnight',
     start_time: typeof row.start_time === 'string' ? row.start_time.slice(0, 5) : null,
     end_time: typeof row.end_time === 'string' ? row.end_time.slice(0, 5) : null,
+    booking_channel: isBookingChannel(String(row.booking_channel ?? ''))
+      ? (row.booking_channel as BookingChannel)
+      : null,
+    booking_channel_detail:
+      typeof row.booking_channel_detail === 'string' && row.booking_channel_detail.trim()
+        ? row.booking_channel_detail.trim()
+        : null,
     linked_event_booking_id: row.linked_event_booking_id
       ? String(row.linked_event_booking_id)
       : null,

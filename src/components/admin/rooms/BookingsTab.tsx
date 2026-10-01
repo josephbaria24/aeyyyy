@@ -8,6 +8,7 @@ import { useBookings, useInvalidateAdmin, useRooms } from '@/lib/admin/queries';
 import { formatMoney, SYSTEM_CURRENCY_SYMBOL } from '@/lib/money';
 import {
   BOOKING_STATUS_LABEL,
+  formatBookingChannel,
   bookingGrandTotal,
   bookingUnpaid,
   formatBookingStayLabel,
@@ -394,6 +395,9 @@ export function BookingsTab({
                       </p>
                       <p className="text-[10px] text-slate-400">
                         {formatBookingStayLabel(booking)}
+                        {booking.booking_channel
+                          ? ` · ${formatBookingChannel(booking)}`
+                          : ''}
                       </p>
                     </div>
                     <div className="text-right">
@@ -546,6 +550,9 @@ export function BookingsTab({
                         </p>
                         <p className="text-xs">
                           {formatBookingStayLabel(booking)}
+                          {booking.booking_channel
+                            ? ` · ${formatBookingChannel(booking)}`
+                            : ''}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-400">
                           Due {formatMoney(bookingGrandTotal(booking))}

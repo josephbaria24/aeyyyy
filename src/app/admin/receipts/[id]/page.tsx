@@ -12,6 +12,7 @@ import {
   nightsBetween,
 } from '@/lib/money';
 import {
+  formatBookingChannel,
   bookingGrandTotal,
   bookingUnpaid,
   normalizeBooking,
@@ -227,6 +228,12 @@ export default function BookingReceiptPage() {
             <p className="text-gray-500 dark:text-slate-400">Phone</p>
             <p className="font-semibold text-[#0a1628] dark:text-slate-100">
               {booking.phone || '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-500 dark:text-slate-400">Booked through</p>
+            <p className="font-semibold text-[#0a1628] dark:text-slate-100">
+              {booking.booking_channel ? formatBookingChannel(booking) : '—'}
             </p>
           </div>
           <div>

@@ -20,7 +20,9 @@ import {
   bookingGrandTotal,
   newChargeId,
   otherChargesTotal,
+  BOOKING_CHANNEL_LABEL,
   type Booking,
+  type BookingChannel,
   type BookingCharge,
   type BookingStatus,
   type StayKind,
@@ -59,8 +61,18 @@ type ManualForm = {
   customAmount: string;
   amountPaid: string;
   status: Extract<BookingStatus, 'confirmed' | 'pending'>;
+  channel: BookingChannel;
+  channelOther: string;
   requests: string;
   notes: string;
+};
+
+const CHANNEL_NOTE: Record<BookingChannel, string> = {
+  walk_in: 'Walk-in reservation',
+  agoda: 'Agoda reservation',
+  booking_com: 'Booking.com reservation',
+  website: 'Website reservation',
+  other: 'Other reservation',
 };
 
 function initialForm(room?: Room): ManualForm {
@@ -81,6 +93,8 @@ function initialForm(room?: Room): ManualForm {
     customAmount: '',
     amountPaid: '0',
     status: 'confirmed',
+    channel: 'walk_in',
+    channelOther: '',
     requests: '',
     notes: 'Walk-in reservation',
   };
@@ -295,6 +309,10 @@ export function ManualReservationDialog({
       toast.error('Enter a custom stay price, or switch back to the default rate');
       return;
     }
+    if (form.channel === 'other' && !form.channelOther.trim()) {
+      toast.error('Type where this booking came from');
+      return;
+    }
     if (availability.kind === 'unavailable') {
       toast.error('This room is manually marked unavailable');
       return;
@@ -337,6 +355,9 @@ export function ManualReservationDialog({
           rooms: 1,
           requests: form.requests.trim() || null,
           status: form.status,
+          booking_channel: form.channel,
+          booking_channel_detail:
+            form.channel === 'other' ? form.channelOther.trim() : null,
           stay_kind: form.stayKind,
           start_time: form.stayKind === 'day_use' ? form.startTime : null,
           end_time: form.stayKind === 'day_use' ? form.endTime : null,
@@ -346,7 +367,7 @@ export function ManualReservationDialog({
           other_charges: cleanedCharges,
           evidence_urls: evidenceUrls,
           currency: SYSTEM_CURRENCY,
-          notes: form.notes.trim() || 'Walk-in reservation',
+          notes: form.notes.trim() || CHANNEL_NOTE[form.channel],
         })
         .select('id, booking_code')
         .single();
@@ -360,14 +381,18 @@ export function ManualReservationDialog({
           form.stayKind === 'day_use'
             ? `${selectedRoom.name} · ${form.checkIn} ${form.startTime}–${form.endTime}`
             : `${selectedRoom.name} (${form.checkIn} to ${checkOut})`;
+        const channelLabel =
+          form.channel === 'other'
+            ? form.channelOther.trim()
+            : BOOKING_CHANNEL_LABEL[form.channel];
         const { error: incomeError } = await supabase.from('income').insert({
-          title: `Walk-in ${inserted.booking_code} — ${form.name.trim()}`,
+          title: `${channelLabel} ${inserted.booking_code} — ${form.name.trim()}`,
           category: 'booking',
           amount: paid,
           currency: SYSTEM_CURRENCY,
           income_date: form.checkIn,
           booking_id: inserted.id,
-          notes: `${stayNote} · ${guestTotal} guest${guestTotal === 1 ? '' : 's'}`,
+          notes: `${channelLabel} · ${stayNote} · ${guestTotal} guest${guestTotal === 1 ? '' : 's'}`,
         });
         if (incomeError) incomeWarning = ' Payment was saved, but income could not be recorded.';
       }
@@ -376,7 +401,9 @@ export function ManualReservationDialog({
         action: 'created',
         entity: 'booking',
         entityId: inserted?.id,
-        summary: `Added walk-in booking ${inserted?.booking_code} for ${selectedRoom.name}`,
+        summary: `Added ${
+          form.channel === 'other' ? form.channelOther.trim() : BOOKING_CHANNEL_LABEL[form.channel]
+        } booking ${inserted?.booking_code} for ${selectedRoom.name}`,
       });
       await invalidate(paid > 0 ? ['bookings', 'income', 'activity'] : ['bookings', 'activity']);
       toast.success('Walk-in reservation created', {
@@ -701,6 +728,59 @@ export function ManualReservationDialog({
                 onChange={(event) => set('amountPaid', event.target.value)}
                 className={fieldClass}
               />
+            </FieldLabel>
+            <FieldLabel label="Booked through" wide>
+              <select
+                required
+                value={form.channel}
+                onChange={(event) => {
+                  const channel = event.target.value as BookingChannel;
+                  setForm((prev) => ({
+                    ...prev,
+                    channel,
+                    notes:
+                      !prev.notes.trim() ||
+                      Object.values(CHANNEL_NOTE).includes(prev.notes)
+                        ? channel === 'other' && prev.channelOther.trim()
+                          ? `${prev.channelOther.trim()} reservation`
+                          : CHANNEL_NOTE[channel]
+                        : prev.notes,
+                  }));
+                }}
+                className={fieldClass}
+              >
+                <option value="walk_in">Walk-in / phone</option>
+                <option value="agoda">Agoda</option>
+                <option value="booking_com">Booking.com</option>
+                <option value="website">Website</option>
+                <option value="other">Other</option>
+              </select>
+              {form.channel === 'other' && (
+                <input
+                  required
+                  value={form.channelOther}
+                  onChange={(event) => {
+                    const channelOther = event.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      channelOther,
+                      notes:
+                        !prev.notes.trim() ||
+                        Object.values(CHANNEL_NOTE).includes(prev.notes) ||
+                        prev.notes === `${prev.channelOther.trim()} reservation`
+                          ? channelOther.trim()
+                            ? `${channelOther.trim()} reservation`
+                            : CHANNEL_NOTE.other
+                          : prev.notes,
+                    }));
+                  }}
+                  className={`${fieldClass} mt-2`}
+                  placeholder="Where did this booking come from?"
+                />
+              )}
+              <span className="mt-1 block text-[10px] text-slate-500">
+                This source is saved on the booking and shown on the report.
+              </span>
             </FieldLabel>
             <FieldLabel label="Reservation status">
               <select

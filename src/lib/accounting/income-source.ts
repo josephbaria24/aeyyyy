@@ -45,6 +45,9 @@ export function inferIncomeSource(row: Pick<Income, 'title' | 'notes' | 'categor
   if (
     row.booking_id ||
     title.startsWith('booking ') ||
+    title.startsWith('booking.com ') ||
+    title.startsWith('agoda ') ||
+    title.startsWith('website ') ||
     title.startsWith('walk-in ')
   ) {
     return 'room';
@@ -69,7 +72,7 @@ export const INCOME_SOURCE_BADGE: Record<IncomeSource, string> = {
 
 export function extractIncomeBookingCode(title: string): string | null {
   const match = title.match(
-    /(?:event walk-in|pool walk-in|event payment|pool payment|walk-in|booking|event|pool)\s+([A-Za-z0-9]+)/i,
+    /(?:event walk-in|pool walk-in|event payment|pool payment|walk-in|booking\.com|agoda|website|booking|event|pool)\s+([A-Za-z0-9]+)/i,
   );
   return match?.[1]?.toUpperCase() ?? null;
 }

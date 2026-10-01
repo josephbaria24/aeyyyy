@@ -18,6 +18,7 @@ import {
   newChargeId,
   otherChargesTotal,
   type Booking,
+  type BookingChannel,
   type BookingCharge,
   type StayKind,
 } from '@/lib/types/booking';
@@ -54,6 +55,8 @@ type EditForm = {
   priceMode: PriceMode;
   customAmount: string;
   amountPaid: string;
+  channel: BookingChannel;
+  channelOther: string;
   requests: string;
   notes: string;
 };
@@ -109,6 +112,8 @@ export function EditRoomBookingDialog({
     priceMode: 'default',
     customAmount: '',
     amountPaid: '0',
+    channel: 'walk_in',
+    channelOther: '',
     requests: '',
     notes: '',
   });
@@ -132,6 +137,8 @@ export function EditRoomBookingDialog({
       priceMode: 'custom',
       customAmount: String(booking.amount),
       amountPaid: String(booking.amount_paid),
+      channel: booking.booking_channel ?? 'walk_in',
+      channelOther: booking.booking_channel_detail ?? '',
       requests: booking.requests ?? '',
       notes: booking.notes ?? '',
     });
@@ -254,6 +261,10 @@ export function EditRoomBookingDialog({
       toast.error('Enter a custom stay price, or switch back to the default rate');
       return;
     }
+    if (form.channel === 'other' && !form.channelOther.trim()) {
+      toast.error('Type where this booking came from');
+      return;
+    }
     if (availability.kind === 'unavailable') {
       toast.error('This room is manually marked unavailable');
       return;
@@ -299,6 +310,9 @@ export function EditRoomBookingDialog({
           check_out: checkOut,
           adults: Math.max(1, Number(form.adults) || 1),
           children: Math.max(0, Number(form.children) || 0),
+          booking_channel: form.channel,
+          booking_channel_detail:
+            form.channel === 'other' ? form.channelOther.trim() : null,
           stay_kind: form.stayKind,
           start_time: form.stayKind === 'day_use' ? form.startTime : null,
           end_time: form.stayKind === 'day_use' ? form.endTime : null,
@@ -388,6 +402,29 @@ export function EditRoomBookingDialog({
                     <option value={form.destination}>{form.destination}</option>
                   )}
               </select>
+            </FieldLabel>
+            <FieldLabel label="Booked through" wide>
+              <select
+                required
+                value={form.channel}
+                onChange={(event) => set('channel', event.target.value)}
+                className={fieldClass}
+              >
+                <option value="walk_in">Walk-in / phone</option>
+                <option value="agoda">Agoda</option>
+                <option value="booking_com">Booking.com</option>
+                <option value="website">Website</option>
+                <option value="other">Other</option>
+              </select>
+              {form.channel === 'other' && (
+                <input
+                  required
+                  value={form.channelOther}
+                  onChange={(event) => set('channelOther', event.target.value)}
+                  className={`${fieldClass} mt-2`}
+                  placeholder="Where did this booking come from?"
+                />
+              )}
             </FieldLabel>
 
             <div className="sm:col-span-2">
