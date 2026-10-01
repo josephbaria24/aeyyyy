@@ -303,18 +303,18 @@ export default function AdminDashboardPage() {
           aria-hidden
           className="absolute inset-0 opacity-60 [background:radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.32),transparent_32%),radial-gradient(circle_at_55%_120%,rgba(16,185,129,0.25),transparent_42%)]"
         />
-        <div className="relative flex items-center justify-between gap-4">
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-300 sm:text-xs">
               Business snapshot
             </p>
-            <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">
+            <p className="mt-1 break-words text-2xl font-bold tracking-tight sm:text-3xl">
               {formatMoney(net)}
             </p>
             <p className="mt-0.5 text-xs text-slate-400">Current net balance</p>
           </div>
           <div
-            className="flex shrink-0 items-center gap-3 rounded-[14px] border border-white/15 bg-white/5 px-3 py-2.5 backdrop-blur-sm sm:gap-3.5 sm:px-4 sm:py-3"
+            className="flex w-full items-center gap-3 rounded-[14px] border border-white/15 bg-white/5 px-3 py-2.5 backdrop-blur-sm sm:w-auto sm:shrink-0 sm:gap-3.5 sm:px-4 sm:py-3"
             title={`${confirmed} of ${filteredBookings.length} bookings are confirmed`}
             aria-label={`${confirmationRate}% of bookings are confirmed: ${confirmed} of ${filteredBookings.length}`}
           >
@@ -328,7 +328,7 @@ export default function AdminDashboardPage() {
                 <span className="text-sm font-bold sm:text-base">{confirmationRate}%</span>
               </div>
             </div>
-            <div className="min-w-0 max-w-[9.5rem] sm:max-w-[12rem]">
+            <div className="min-w-0 flex-1 sm:max-w-[12rem]">
               <p className="text-sm font-semibold leading-tight">Bookings confirmed</p>
               <p className="mt-0.5 text-[11px] leading-snug text-slate-300 sm:text-xs">
                 {filteredBookings.length === 0
