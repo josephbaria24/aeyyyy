@@ -11,8 +11,14 @@ import {
   formatBookingChannel,
 } from '@/lib/types/booking';
 
-/** Owner's monthly cut of recorded income. */
+/** Owner's cut of net profit (income minus expenses). */
 const OWNER_SHARE_RATE = 0.4;
+
+function splitProfit(net: number) {
+  const profit = Math.max(0, net);
+  const owner = roundMoney(profit * OWNER_SHARE_RATE);
+  return { owner, inn: roundMoney(profit - owner) };
+}
 
 function roundMoney(value: number) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -76,8 +82,7 @@ export default function AdminReportsPage() {
   const totalIncome = sumBy(filteredIncome, (i) => Number(i.amount));
   const totalExpenses = sumBy(filteredExpenses, (e) => Number(e.amount));
   const net = totalIncome - totalExpenses;
-  const ownerShare = roundMoney(totalIncome * OWNER_SHARE_RATE);
-  const innShare = roundMoney(totalIncome - ownerShare);
+  const { owner: ownerShare, inn: innShare } = splitProfit(net);
 
   const monthlyShares = useMemo(() => {
     const keys = new Set<string>();
@@ -92,15 +97,16 @@ export default function AdminReportsPage() {
         filteredExpenses.filter((row) => row.expense_date.startsWith(key)),
         (row) => Number(row.amount),
       );
-      const owner = roundMoney(income * OWNER_SHARE_RATE);
+      const monthNet = income - expenses;
+      const split = splitProfit(monthNet);
       return {
         key,
         label: monthLabel(key),
         income,
         expenses,
-        owner,
-        inn: roundMoney(income - owner),
-        net: income - expenses,
+        owner: split.owner,
+        inn: split.inn,
+        net: monthNet,
       };
     });
   }, [filteredExpenses, filteredIncome]);
@@ -237,7 +243,7 @@ export default function AdminReportsPage() {
                     Owner&apos;s share
                   </p>
                   <p className="mt-0.5 text-[11px] text-sky-100/90 dark:text-sky-200/80">
-                    40% of income in this period, calculated automatically. The inn keeps the other 60%.
+                    40% of net profit (income minus expenses). The inn keeps the other 60%. No share when the period is at a loss.
                   </p>
                 </div>
                 <p className="report-money text-2xl font-black text-white dark:text-sky-50">
@@ -246,8 +252,8 @@ export default function AdminReportsPage() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <div className="rounded-[9px] bg-[#083e6d] px-3 py-2 dark:bg-slate-950">
-                  <p className="text-[10px] font-semibold uppercase text-sky-200 dark:text-sky-400">Income</p>
-                  <p className="report-money text-sm font-bold text-white">{formatMoney(totalIncome)}</p>
+                  <p className="text-[10px] font-semibold uppercase text-sky-200 dark:text-sky-400">Net profit</p>
+                  <p className="report-money text-sm font-bold text-white">{formatMoney(net)}</p>
                 </div>
                 <div className="rounded-[9px] bg-white px-3 py-2 text-[#0b4f8a] dark:bg-sky-300 dark:text-sky-950">
                   <p className="text-[10px] font-semibold uppercase">Owner 40%</p>
