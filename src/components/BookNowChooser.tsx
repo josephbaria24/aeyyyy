@@ -37,6 +37,27 @@ export function BookNowButton({ className, onOpen }: BookNowButtonProps) {
   );
 }
 
+const choices = [
+  {
+    href: '/rooms',
+    title: 'Room',
+    detail: 'Overnight stay',
+    icon: BedDouble,
+  },
+  {
+    href: '/book/pool',
+    title: 'Pool',
+    detail: 'Day-use swimming',
+    icon: Waves,
+  },
+  {
+    href: '/book/event',
+    title: 'Event',
+    detail: 'Hall or celebration area',
+    icon: PartyPopper,
+  },
+] as const;
+
 export function BookNowChooser({
   open,
   onOpenChange,
@@ -46,65 +67,35 @@ export function BookNowChooser({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[min(32rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border-white/10 bg-[#0a1628] p-6 text-white sm:rounded-2xl [&>button]:text-white [&>button]:opacity-80">
+      <DialogContent className="max-w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border-white/10 bg-[#0a1628] p-4 text-white sm:p-5 [&>button]:text-white [&>button]:opacity-80">
         <DialogHeader className="text-left">
-          <DialogTitle className="text-xl font-bold text-white">What would you like to book?</DialogTitle>
-          <DialogDescription className="text-white/65">
-            Stay overnight, swim for the day, or reserve a space for a celebration.
+          <DialogTitle className="text-lg font-bold text-white">What would you like to book?</DialogTitle>
+          <DialogDescription className="text-sm text-white/65">
+            Choose a room, the pool, or an event space.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link
-            href="/rooms"
-            onClick={() => onOpenChange(false)}
-            className={cn(
-              'group rounded-2xl border border-white/12 bg-white/5 p-5 text-left transition',
-              'hover:border-accent/70 hover:bg-accent/10',
-            )}
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-accent">
-              <BedDouble className="h-5 w-5" />
-            </span>
-            <p className="mt-4 text-base font-semibold text-white">Room</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/60">
-              Overnight stay in a guest room.
-            </p>
-          </Link>
-
-          <Link
-            href="/book/pool"
-            onClick={() => onOpenChange(false)}
-            className={cn(
-              'group rounded-2xl border border-white/12 bg-white/5 p-5 text-left transition',
-              'hover:border-accent/70 hover:bg-accent/10',
-            )}
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-accent">
-              <Waves className="h-5 w-5" />
-            </span>
-            <p className="mt-4 text-base font-semibold text-white">Pool</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/60">
-              Day-use swimming for family and friends.
-            </p>
-          </Link>
-
-          <Link
-            href="/book/event"
-            onClick={() => onOpenChange(false)}
-            className={cn(
-              'group rounded-2xl border border-white/12 bg-white/5 p-5 text-left transition',
-              'hover:border-accent/70 hover:bg-accent/10',
-            )}
-          >
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-accent">
-              <PartyPopper className="h-5 w-5" />
-            </span>
-            <p className="mt-4 text-base font-semibold text-white">Event</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/60">
-              Reserve the hall or another celebration area.
-            </p>
-          </Link>
+        <div className="grid grid-cols-3 gap-2">
+          {choices.map((choice) => {
+            const Icon = choice.icon;
+            return (
+              <Link
+                key={choice.href}
+                href={choice.href}
+                onClick={() => onOpenChange(false)}
+                className={cn(
+                  'flex min-w-0 flex-col items-center rounded-xl border border-white/12 bg-white/5 px-2 py-3 text-center transition',
+                  'hover:border-accent/70 hover:bg-accent/10',
+                )}
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-accent">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <p className="mt-2 text-sm font-semibold text-white">{choice.title}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-white/60">{choice.detail}</p>
+              </Link>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>
