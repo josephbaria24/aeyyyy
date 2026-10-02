@@ -16,7 +16,7 @@ import {
 import { adminRoomsHref } from '@/lib/admin/rooms-hub';
 import { adminEventsHref } from '@/lib/admin/events-hub';
 import { adminPoolHref } from '@/lib/admin/pool-hub';
-import { areaRangeConflicts } from '@/lib/event-status';
+import { offeringDatesConflict } from '@/lib/event-status';
 import { getStayAvailability } from '@/lib/room-status';
 import type { EventOffering, OfferingCategory } from '@/lib/types/event-offering';
 import {
@@ -960,11 +960,12 @@ function TransferBookingDialog({
       return;
     }
     if (
-      areaRangeConflicts(
+      offeringDatesConflict(
         eventBookings.filter((item) => item.id !== booking.id),
         selectedOffering.id,
         start,
         end,
+        { exclusive: selectedOffering.category !== 'pool' && destination !== 'pool' },
       )
     ) {
       toast.error(`Those dates are already reserved for “${selectedOffering.title}”`);
@@ -1506,11 +1507,12 @@ function EditEventBookingDialog({
       return;
     }
     if (
-      areaRangeConflicts(
+      offeringDatesConflict(
         bookings.filter((item) => item.id !== booking.id),
         selected.id,
         form.startDate,
         endDate,
+        { exclusive: selected.category !== 'pool' },
       )
     ) {
       toast.error('That date range is already reserved for this area');
@@ -1817,7 +1819,11 @@ function ManualEventReservation({
       toast.error('This area is marked unavailable');
       return;
     }
-    if (areaRangeConflicts(bookings, selected.id, form.startDate, endDate)) {
+    if (
+      offeringDatesConflict(bookings, selected.id, form.startDate, endDate, {
+        exclusive: category !== 'pool',
+      })
+    ) {
       toast.error('That date range is already reserved for this area');
       return;
     }

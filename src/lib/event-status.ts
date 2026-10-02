@@ -68,12 +68,22 @@ export function getAreaStatusForDate(
   const reserved = held.find((b) => b.status === 'pending' && eventCoversDate(b, date));
   if (reserved) return { status: 'reserved', booking: reserved };
 
-  const upcoming = held.find(
-    (b) => b.status === 'confirmed' && (b.event_date || '') > date,
-  );
-  if (upcoming) return { status: 'reserved', booking: upcoming };
-
   return { status: 'available', booking: null };
+}
+
+/**
+ * Event areas stay exclusive for a date range.
+ * Pool packages can take several reservations on the same day.
+ */
+export function offeringDatesConflict(
+  bookings: EventBooking[],
+  offeringId: string,
+  start: string,
+  end: string,
+  options?: { exclusive?: boolean },
+) {
+  if (options?.exclusive === false) return false;
+  return areaRangeConflicts(bookings, offeringId, start, end);
 }
 
 export function areaRangeConflicts(

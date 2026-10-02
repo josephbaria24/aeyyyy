@@ -167,9 +167,9 @@ export default function EventBooking({ category = 'event' }: { category?: Offeri
       toast.error(toastCapacity(selected.capacity));
       return;
     }
-    const blocked = areaStays.some(
-      (stay) => form.startDate < stay.check_out && endDate >= stay.check_in,
-    );
+    const blocked =
+      !isPool &&
+      areaStays.some((stay) => form.startDate < stay.check_out && endDate >= stay.check_in);
     if (blocked) {
       toast.error(toastBlocked);
       return;
@@ -409,7 +409,7 @@ export default function EventBooking({ category = 'event' }: { category?: Offeri
                     <EventAreaCalendar
                       from={form.startDate}
                       until={form.endDate}
-                      stays={areaStays}
+                      stays={isPool ? [] : areaStays}
                       areaUnavailable={areaUnavailable}
                       onChange={({ from, until }) =>
                         setForm((prev) => ({ ...prev, startDate: from, endDate: until }))

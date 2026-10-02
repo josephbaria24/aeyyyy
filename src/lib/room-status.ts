@@ -37,11 +37,12 @@ export function confirmedBookingsForRoom(room: Room, bookings: Booking[]) {
 }
 
 /**
- * Occupancy for a selected calendar date D:
+ * Occupancy for a selected calendar date D only.
+ * A stay in December does not mark earlier dates reserved.
  * - Unavailable: manual room.availability === 'unavailable'
- * - Occupied: confirmed stay where check_in <= D < check_out
- * - Reserved: no stay on D, but a future confirmed check_in > D
- * - Available: otherwise
+ * - Occupied: confirmed stay covering D that has already started
+ * - Reserved: confirmed stay covering D that starts after today
+ * - Available: D is outside every confirmed stay
  */
 export function getRoomStatusForDate(
   room: Room,
@@ -53,19 +54,13 @@ export function getRoomStatusForDate(
   }
 
   const d = toDateOnly(date);
-  const confirmed = confirmedBookingsForRoom(room, bookings);
-
-  const occupying = confirmed.find((b) => b.check_in <= d && d < b.check_out);
-  if (occupying) {
-    return { status: 'occupied', booking: occupying };
-  }
-
-  const upcoming = confirmed.find((b) => b.check_in > d);
-  if (upcoming) {
-    return { status: 'reserved', booking: upcoming };
-  }
-
-  return { status: 'available', booking: null };
+  const today = todayIsoLocal();
+  const covering = confirmedBookingsForRoom(room, bookings).find(
+    (b) => b.check_in <= d && d < b.check_out,
+  );
+  if (!covering) return { status: 'available', booking: null };
+  if (covering.check_in > today) return { status: 'reserved', booking: covering };
+  return { status: 'occupied', booking: covering };
 }
 
 export function todayIsoLocal(date = new Date()) {
@@ -140,9 +135,11 @@ export function getRoomStatusFromOccupancy(
   if (room.availability === 'unavailable') return 'unavailable';
 
   const d = toDateOnly(date);
-  const forRoom = confirmedStaysForRoom(room, stays);
-
-  if (forRoom.some((s) => s.check_in <= d && d < s.check_out)) return 'occupied';
-  if (forRoom.some((s) => s.check_in > d)) return 'reserved';
-  return 'available';
+  const today = todayIsoLocal();
+  const covering = confirmedStaysForRoom(room, stays).find(
+    (s) => s.check_in <= d && d < s.check_out,
+  );
+  if (!covering) return 'available';
+  if (covering.check_in > today) return 'reserved';
+  return 'occupied';
 }

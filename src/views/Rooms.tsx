@@ -23,7 +23,6 @@ const fadeInUp = {
 function roomToCarouselItem(room: Room, status: RoomLiveStatus): CarouselCardItem {
   const photos = roomImages(room);
   const unavailable = room.availability === 'unavailable' || status === 'unavailable';
-  const availableToday = status === 'available';
   return {
     id: room.id,
     title: room.name,
@@ -35,9 +34,9 @@ function roomToCarouselItem(room: Room, status: RoomLiveStatus): CarouselCardIte
     badge: room.category || 'Standard',
     statusBadge: unavailable
       ? 'Temporarily unavailable'
-      : availableToday
-        ? 'Available today'
-        : 'Not available today',
+      : status === 'occupied'
+        ? 'Not available today'
+        : 'Available today',
     date: room.description?.trim() || undefined,
     href: `/book?room=${encodeURIComponent(room.name)}`,
     disabled: unavailable,
