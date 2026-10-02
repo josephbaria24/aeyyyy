@@ -17,6 +17,7 @@ const empty = {
   title: '',
   description: '',
   notes: '',
+  corkage_note: '',
   price: '',
   capacity: '',
   sort_order: '0',
@@ -75,6 +76,7 @@ export function AreasTab({ category = 'event' }: { category?: OfferingCategory }
         slug: slugifyEventTitle(title) || `area-${Date.now()}`,
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
+        corkage_note: form.corkage_note.trim() || null,
         price: Number(form.price) || 0,
         capacity: Math.max(0, Number(form.capacity) || 0),
         sort_order: Number(form.sort_order) || 0,
@@ -114,7 +116,7 @@ export function AreasTab({ category = 'event' }: { category?: OfferingCategory }
       toast.error('Could not save area', {
         description:
           err instanceof Error
-            ? `${err.message} — run supabase/event-areas-schema.sql if columns are missing.`
+            ? `${err.message} — run supabase/offering-corkage.sql if the corkage column is missing.`
             : undefined,
       });
     } finally {
@@ -128,6 +130,7 @@ export function AreasTab({ category = 'event' }: { category?: OfferingCategory }
       title: item.title,
       description: item.description ?? '',
       notes: item.notes ?? '',
+      corkage_note: item.corkage_note ?? '',
       price: item.price ? String(item.price) : '',
       capacity: item.capacity ? String(item.capacity) : '',
       sort_order: String(item.sort_order),
@@ -205,6 +208,15 @@ export function AreasTab({ category = 'event' }: { category?: OfferingCategory }
               rows={2}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className={field}
+            />
+          </label>
+          <label className="md:col-span-2">
+            <span className={labelClass}>Corkage</span>
+            <input
+              placeholder="e.g. No corkage, or ₱200 per bottle. Leave blank to hide."
+              value={form.corkage_note}
+              onChange={(e) => setForm({ ...form, corkage_note: e.target.value })}
               className={field}
             />
           </label>

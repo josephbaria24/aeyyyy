@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BedDouble, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, BedDouble, CheckCircle2, Loader2, PartyPopper, Waves } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { BookingReferenceCard } from '@/components/BookingReferenceCard';
@@ -346,11 +346,15 @@ export default function EventBooking({ category = 'event' }: { category?: Offeri
                               : 'border-white/10 bg-white/5 hover:border-white/25',
                           )}
                         >
-                          <div className="h-20 w-24 shrink-0 bg-white/5">
+                          <div className="grid h-20 w-24 shrink-0 place-items-center bg-white/10 text-white/70">
                             {cover ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={cover} alt="" className="h-full w-full object-cover" />
-                            ) : null}
+                            ) : isPool ? (
+                              <Waves className="h-7 w-7" aria-hidden />
+                            ) : (
+                              <PartyPopper className="h-7 w-7" aria-hidden />
+                            )}
                           </div>
                           <div className="min-w-0 py-3 pr-3">
                             <p className="font-semibold">
@@ -394,6 +398,11 @@ export default function EventBooking({ category = 'event' }: { category?: Offeri
                             {selected.notes}
                           </p>
                         )}
+                        {selected.corkage_note && (
+                          <p className="mt-2 text-sm text-white/80">
+                            Corkage: {selected.corkage_note}
+                          </p>
+                        )}
                         <p className="mt-3 text-sm text-white/80">
                           {selected.price > 0
                             ? `${formatMoney(selected.price)} per guest`
@@ -435,62 +444,72 @@ export default function EventBooking({ category = 'event' }: { category?: Offeri
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      required
-                      placeholder="Full name"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      className={inputClass}
-                    />
-                    <input
-                      required
-                      type="email"
-                      placeholder="Email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      className={inputClass}
-                    />
-                    <input
-                      placeholder="Phone"
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className={inputClass}
-                    />
-                    <input
-                      required
-                      type="number"
-                      min={1}
-                      max={selected?.capacity || undefined}
-                      placeholder="Number of guests"
-                      value={form.guests}
-                      onChange={(e) => setForm({ ...form, guests: e.target.value })}
-                      className={inputClass}
-                    />
-                    <label className="text-xs text-white/50">
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
+                      Full name
+                      <input
+                        required
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
+                      Email
+                      <input
+                        required
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
+                      Phone
+                      <input
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
+                      Number of guests
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        max={selected?.capacity || undefined}
+                        value={form.guests}
+                        onChange={(e) => setForm({ ...form, guests: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
                       Starts at
                       <input
                         type="time"
                         value={form.startTime}
                         onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                        className={`${inputClass} mt-1 w-full`}
+                        className={`${inputClass} w-full`}
                       />
                     </label>
-                    <label className="text-xs text-white/50">
-                      Until when (time)
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70">
+                      Until when
                       <input
                         type="time"
                         value={form.endTime}
                         onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-                        className={`${inputClass} mt-1 w-full`}
+                        className={`${inputClass} w-full`}
                       />
                     </label>
-                    <textarea
-                      placeholder="What are you celebrating? Setup, cake, extra requests…"
-                      rows={3}
-                      value={form.requests}
-                      onChange={(e) => setForm({ ...form, requests: e.target.value })}
-                      className={`${inputClass} sm:col-span-2`}
-                    />
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-white/70 sm:col-span-2">
+                      Occasion / notes
+                      <textarea
+                        rows={3}
+                        value={form.requests}
+                        onChange={(e) => setForm({ ...form, requests: e.target.value })}
+                        className={inputClass}
+                      />
+                    </label>
                   </div>
 
                   {overCapacity && (

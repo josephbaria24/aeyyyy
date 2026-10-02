@@ -165,6 +165,9 @@ export function Navbar() {
             <Link href="/rooms" className="hover:text-accent transition-colors">
               Rooms
             </Link>
+            <Link href="/book/pool" className="hover:text-accent transition-colors">
+              Pool
+            </Link>
             <Link href="/#events" className="hover:text-accent transition-colors">
               Events
             </Link>
@@ -222,6 +225,13 @@ export function Navbar() {
             </Link>
             <Link href="/rooms" className="text-white text-xl font-medium">
               Rooms
+            </Link>
+            <Link
+              href="/book/pool"
+              className="text-white text-xl font-medium"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Pool
             </Link>
             <Link
               href="/#events"

@@ -12,10 +12,13 @@ import { BookingStatusChecker } from '@/components/BookingStatusChecker';
 import {
   useActiveEvents,
   useActiveGallery,
+  useActiveOfferings,
   useActivePartners,
   useActiveRules,
   usePublicSiteSettings,
 } from '@/lib/admin/queries';
+import { eventAreaImages } from '@/lib/types/event-offering';
+import { formatMoney } from '@/lib/money';
 import { DEFAULT_GALLERY, DEFAULT_SITE_SETTINGS, phoneHref } from '@/lib/types/site';
 import type { SiteEvent } from '@/lib/types/content';
 import { 
@@ -31,6 +34,7 @@ const fadeInUp = {
 export default function Home() {
   const { data: rules = [] } = useActiveRules();
   const { data: events = [] } = useActiveEvents();
+  const { data: offerings = [] } = useActiveOfferings();
   const { data: settingsData } = usePublicSiteSettings();
   const { data: galleryData } = useActiveGallery();
   const { data: partners = [] } = useActivePartners();
@@ -92,6 +96,10 @@ export default function Home() {
   const past = useMemo(
     () => events.filter((e) => e.listing === 'past'),
     [events],
+  );
+  const poolPackages = useMemo(
+    () => offerings.filter((item) => item.category === 'pool' && item.availability === 'open'),
+    [offerings],
   );
 
   return (
@@ -167,7 +175,7 @@ export default function Home() {
 
           <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 md:gap-6 lg:grid-cols-4 lg:gap-8">
             {[
-              { icon: Waves, title: "Refreshing Pool", desc: "Cool down, swim, or simply unwind beside our inviting outdoor pool surrounded by greenery." },
+              { icon: Waves, title: "Refreshing Pool", desc: "Cool down, swim, or simply unwind beside our inviting outdoor pool surrounded by greenery.", href: "/book/pool" },
               { icon: BedDouble, title: "Comfortable Rooms", desc: "Clean, cozy rooms with practical amenities designed to help every guest rest comfortably." },
               { icon: UsersRound, title: "Guest-Friendly Spaces", desc: "Welcoming shared areas for families, friends, and travelers to relax and enjoy their stay." },
               { icon: ConciergeBell, title: "Comfort & Care", desc: "Attentive service and a safe, peaceful atmosphere from check-in through check-out." }
@@ -183,6 +191,15 @@ export default function Home() {
                 </div>
                 <h3 className="mb-2 text-base font-bold text-[#0a1628] md:mb-4 md:text-xl">{feature.title}</h3>
                 <p className="text-xs leading-relaxed text-gray-600 md:text-sm">{feature.desc}</p>
+                {'href' in feature && feature.href ? (
+                  <Link
+                    href={feature.href}
+                    className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent md:text-sm"
+                  >
+                    Book the pool
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                ) : null}
               </motion.div>
             ))}
           </div>
@@ -447,6 +464,66 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
+
+      {poolPackages.length > 0 && (
+        <section id="pool" className="bg-[#f4fbfb] py-16 text-[#0a1628] md:py-24">
+          <div className="container mx-auto px-6">
+            <div className="mb-10 text-center md:mb-14">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-accent">
+                Day use
+              </p>
+              <h2 className="mb-4 text-4xl font-bold md:text-5xl">Book the pool</h2>
+              <p className="mx-auto max-w-2xl text-lg text-gray-600">
+                Swim for a few hours with family and friends. Pick a package and choose your time.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {poolPackages.map((item) => {
+                const photo = eventAreaImages(item)[0];
+                return (
+                  <article
+                    key={item.id}
+                    className="overflow-hidden rounded-3xl border border-[#0a1628]/8 bg-white shadow-sm"
+                  >
+                    <div className="relative h-48 bg-[#0a1628]">
+                      {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photo} alt={item.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-white/70">
+                          <Waves className="h-10 w-10" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-6">
+                      <h3 className="text-xl font-bold">{item.title}</h3>
+                      {item.description ? (
+                        <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-gray-600">
+                          {item.description}
+                        </p>
+                      ) : null}
+                      <p className="mt-3 text-sm font-semibold text-[#0a1628]">
+                        {item.price > 0 ? `${formatMoney(item.price)} per guest` : 'Price on request'}
+                        {item.capacity > 0 ? ` · up to ${item.capacity} guests` : ''}
+                      </p>
+                      {item.corkage_note ? (
+                        <p className="mt-1 text-xs text-gray-500">Corkage: {item.corkage_note}</p>
+                      ) : null}
+                      <Link
+                        href={`/book/pool?slug=${encodeURIComponent(item.slug)}`}
+                        className="mt-5 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent/90"
+                      >
+                        Book this package
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
       )}
 
       {events.length > 0 && (

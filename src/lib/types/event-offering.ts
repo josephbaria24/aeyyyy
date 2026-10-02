@@ -6,6 +6,8 @@ export type EventOffering = {
   slug: string;
   description: string | null;
   notes: string | null;
+  /** Guest-facing corkage line, e.g. "No corkage" or "₱200 per bottle". */
+  corkage_note: string | null;
   price: number;
   capacity: number;
   sort_order: number;
@@ -41,6 +43,10 @@ export function mapEventOffering(
     slug: String(row.slug ?? ''),
     description: (row.description as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    corkage_note:
+      typeof row.corkage_note === 'string' && row.corkage_note.trim()
+        ? row.corkage_note.trim()
+        : null,
     price: Number(row.price) || 0,
     capacity: Math.max(0, Number(row.capacity) || 0),
     sort_order: Number(row.sort_order) || 0,
