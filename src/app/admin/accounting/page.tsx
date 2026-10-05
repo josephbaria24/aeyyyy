@@ -224,6 +224,7 @@ export default function AdminAccountingPage() {
   const [statsDate, setStatsDate] = useState(() => localDateValue());
   const [entryType, setEntryType] = useState<'income' | 'expense'>('income');
   const [ledgerType, setLedgerType] = useState<'income' | 'expense'>('income');
+  const [ledgerMonth, setLedgerMonth] = useState(() => localDateValue().slice(0, 7));
   const [incomeSearch, setIncomeSearch] = useState('');
   const [incomeSourceFilter, setIncomeSourceFilter] = useState<IncomeSourceFilter>('all');
   const [expenseSearch, setExpenseSearch] = useState('');
@@ -244,9 +245,39 @@ export default function AdminAccountingPage() {
     () => expenses.filter((e) => !e.receipt_url),
     [expenses],
   );
+  const ledgerMonthOptions = useMemo(() => {
+    const keys = new Set<string>([localDateValue().slice(0, 7)]);
+    for (const row of income) {
+      if (row.income_date) keys.add(row.income_date.slice(0, 7));
+    }
+    for (const row of expenses) {
+      if (row.expense_date) keys.add(row.expense_date.slice(0, 7));
+    }
+    return [...keys]
+      .filter((key) => /^\d{4}-\d{2}$/.test(key))
+      .sort((a, b) => b.localeCompare(a))
+      .map((value) => ({
+        value,
+        label: new Date(`${value}-01T00:00:00`).toLocaleDateString(undefined, {
+          month: 'long',
+          year: 'numeric',
+        }),
+      }));
+  }, [expenses, income]);
+  const ledgerMonthLabel =
+    ledgerMonthOptions.find((option) => option.value === ledgerMonth)?.label ?? ledgerMonth;
+  const monthIncome = useMemo(
+    () => income.filter((row) => row.income_date.slice(0, 7) === ledgerMonth),
+    [income, ledgerMonth],
+  );
+  const monthExpenses = useMemo(
+    () => expenses.filter((row) => row.expense_date.slice(0, 7) === ledgerMonth),
+    [expenses, ledgerMonth],
+  );
+
   const filteredIncome = useMemo(() => {
     const term = incomeSearch.trim().toLowerCase();
-    return income.filter((row) => {
+    return monthIncome.filter((row) => {
       const source = inferIncomeSource(row);
       if (incomeSourceFilter !== 'all' && source !== incomeSourceFilter) return false;
       if (!term) return true;
@@ -260,30 +291,30 @@ export default function AdminAccountingPage() {
         formatGuestCount(resolveIncomeGuests(row, roomById, roomByCode, eventByCode)),
       ].some((value) => String(value ?? '').toLowerCase().includes(term));
     });
-  }, [income, incomeSearch, incomeSourceFilter, roomById, roomByCode, eventByCode]);
+  }, [monthIncome, incomeSearch, incomeSourceFilter, roomById, roomByCode, eventByCode]);
 
   const incomeSourceCounts = useMemo(() => {
     const counts: Record<IncomeSourceFilter, number> = {
-      all: income.length,
+      all: monthIncome.length,
       room: 0,
       event: 0,
       pool: 0,
       other: 0,
     };
-    for (const row of income) {
+    for (const row of monthIncome) {
       counts[inferIncomeSource(row)] += 1;
     }
     return counts;
-  }, [income]);
+  }, [monthIncome]);
   const filteredExpenses = useMemo(() => {
     const term = expenseSearch.trim().toLowerCase();
-    if (!term) return expenses;
-    return expenses.filter((row) =>
+    if (!term) return monthExpenses;
+    return monthExpenses.filter((row) =>
       [row.title, row.category, row.expense_date, row.notes, row.amount].some((value) =>
         String(value ?? '').toLowerCase().includes(term),
       ),
     );
-  }, [expenseSearch, expenses]);
+  }, [expenseSearch, monthExpenses]);
 
   const addIncome = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1021,7 +1052,7 @@ export default function AdminAccountingPage() {
                 <TrendingUp className="h-3.5 w-3.5" />
                 Income
                 <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                  {income.length}
+                  {monthIncome.length}
                 </span>
               </button>
               <button
@@ -1037,10 +1068,28 @@ export default function AdminAccountingPage() {
                 <TrendingDown className="h-3.5 w-3.5" />
                 Expenses
                 <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
-                  {expenses.length}
+                  {monthExpenses.length}
                 </span>
               </button>
             </div>
+
+            <label className="flex items-center justify-between gap-3 rounded-[11px] admin-hairline bg-white px-3 py-2 dark:bg-slate-900">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Ledger month
+              </span>
+              <select
+                value={ledgerMonth}
+                onChange={(event) => setLedgerMonth(event.target.value)}
+                aria-label="Ledger month"
+                className="h-8 min-w-0 rounded-[8px] border-0 bg-slate-100 px-2 text-xs font-semibold text-slate-800 outline-none dark:bg-slate-950 dark:text-slate-100"
+              >
+                {ledgerMonthOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <div
               className={cn(
@@ -1159,7 +1208,7 @@ export default function AdminAccountingPage() {
                   <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
                     {incomeSearch || incomeSourceFilter !== 'all'
                       ? 'No matching income records.'
-                      : 'No income records yet.'}
+                      : `No income in ${ledgerMonthLabel}. Open another month to see earlier records.`}
                   </li>
                 )}
               </ul>
@@ -1226,7 +1275,7 @@ export default function AdminAccountingPage() {
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
                           {incomeSearch || incomeSourceFilter !== 'all'
                             ? 'No matching income records.'
-                            : 'No income records yet.'}
+                            : `No income in ${ledgerMonthLabel}. Open another month to see earlier records.`}
                         </td>
                       </tr>
                     )}
@@ -1322,7 +1371,9 @@ export default function AdminAccountingPage() {
                 ))}
                 {filteredExpenses.length === 0 && (
                   <li className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
-                    {expenseSearch ? 'No matching expense records.' : 'No expense records yet.'}
+                    {expenseSearch
+                      ? 'No matching expense records.'
+                      : `No expenses in ${ledgerMonthLabel}. Open another month to see earlier records.`}
                   </li>
                 )}
               </ul>
@@ -1392,7 +1443,9 @@ export default function AdminAccountingPage() {
                     {filteredExpenses.length === 0 && (
                       <tr>
                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500 dark:text-slate-400">
-                          {expenseSearch ? 'No matching expense records.' : 'No expense records yet.'}
+                          {expenseSearch
+                      ? 'No matching expense records.'
+                      : `No expenses in ${ledgerMonthLabel}. Open another month to see earlier records.`}
                         </td>
                       </tr>
                     )}
